@@ -184,10 +184,12 @@ class TCPIO(AbstractTransport):
         try:
             self._sock.bind(self.address)
             self._sock.listen()
-            print(f"listening connection at '{self.address[0]}:{self.address[1]}'")
+            print(
+                f"listening connection at {self.address}", file=sys.stderr,
+            )
 
             self.conn, addr = self._sock.accept()
-            LOGGER.info(f"accept connection from {addr}")
+            print(f"accept connection from {addr}", file=sys.stderr)
 
             self._listen_socket()
 
