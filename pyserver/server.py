@@ -135,6 +135,7 @@ class LSPServer(Commands):
         )
 
         self._publish_diagnostic_lock = threading.Lock()
+        self._listen_lock = threading.Lock()
 
     def listen(self):
         """listen remote"""
@@ -153,18 +154,20 @@ class LSPServer(Commands):
     def _listen_message(self):
         stream = Stream()
         while True:
-            message = self.transport_channel.get()
-            stream.put(message)
-            if not message:
-                return
+            # this scope must thread-locked to prevent shuffled chunk
+            with self._listen_lock:
+                chunk = self.transport_channel.get()
+                stream.put(chunk)
+                if not chunk:
+                    return
 
-            for content in stream.get_contents():
-                message = RPCMessage.from_bytes(content)
-                LOGGER.debug(f"Received << {message}")
-                try:
-                    self.exec_message(message)
-                except Exception as err:
-                    LOGGER.error(err, exc_info=True)
+                for content in stream.get_contents():
+                    message = RPCMessage.from_bytes(content)
+                    LOGGER.debug(f"Received << {message}")
+                    try:
+                        self.exec_message(message)
+                    except Exception as err:
+                        LOGGER.error(err, exc_info=True)
 
     def exec_notification(self, method, params):
         LOGGER.info(f"Exec Notification: {method!r} {params}")

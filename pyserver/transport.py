@@ -53,7 +53,12 @@ class Stream:
 
     def __init__(self, content: bytes = b""):
         self.buffer = [content] if content else []
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+
+    def clear(self):
+        """clear buffer"""
+        with self._lock:
+            self.buffer = []
 
     def put(self, data: bytes) -> None:
         """put stream data"""
@@ -69,7 +74,7 @@ class Stream:
             headers.decode(self.HEADER_ENCODING)
         ):
             return int(found.group(1))
-        raise ValueError("unable find Content-Length")
+        raise ValueError("unable find 'Content-Length'")
 
     def get_contents(self) -> Iterator[bytes]:
         """get contents
@@ -86,37 +91,33 @@ class Stream:
         """
 
         def get_content():
-            buffers = b"".join(self.buffer)
+            str_buffer = b"".join(self.buffer)
             separator = b"\r\n\r\n"
 
-            if not buffers:
+            if not str_buffer:
                 raise EOFError("buffer empty")
 
             try:
-                header_end = buffers.index(separator)
-                content_length = self._get_content_length(buffers[:header_end])
+                header_end = str_buffer.index(separator)
+                content_length = self._get_content_length(str_buffer[:header_end])
 
             except ValueError as err:
-                # clean up buffer
-                self.buffer = []
-
-                LOGGER.debug("buffer: %s", buffers)
                 raise ParseError(f"header error: {err!r}") from err
 
             start_index = header_end + len(separator)
             end_index = start_index + content_length
-            content = buffers[start_index:end_index]
+            content = str_buffer[start_index:end_index]
             recv_len = len(content)
 
             if recv_len < content_length:
                 raise ContentIncomplete(f"want: {content_length}, expected: {recv_len}")
 
             # replace buffer
-            self.buffer = [buffers[end_index:]]
+            self.buffer = [str_buffer[end_index:]]
             return content
 
-        with self._lock:
-            while True:
+        while True:
+            with self._lock:
                 try:
                     content = get_content()
                 except (EOFError, ContentIncomplete):
@@ -124,7 +125,7 @@ class Stream:
                 except Exception as err:
                     LOGGER.error(err)
                     # clean up buffer
-                    self.buffer = []
+                    self.clear()
                     break
                 else:
                     yield content
