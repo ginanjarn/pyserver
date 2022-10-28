@@ -1,5 +1,6 @@
 """completion service"""
 
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import List, Dict, Any
@@ -49,21 +50,38 @@ class CompletionService(Services):
         },
     )
 
+    identifier_pattern = re.compile(r"[a-zA-Z]\w*")
+
+    def get_text_edit_range(self):
+        if self._text_edit_range:
+            return self._text_edit_range
+
+        linepos = self.params.line
+        lines = self.params.text.split("\n")
+        trigger_line = lines[linepos]
+
+        trigger_character = self.params.character
+        start_char = end_char = trigger_character
+
+        # text range wraps word where trigger located
+        for found in self.identifier_pattern.finditer(trigger_line):
+            start, end = found.start(), found.end()
+            if start <= self.params.character <= end:
+                start_char = start
+                end_char = end
+                break
+
+        # else:
+        # change only happen at trigger location
+
+        self._text_edit_range = {
+            "start": {"line": linepos, "character": start_char},
+            "end": {"line": linepos, "character": end_char},
+        }
+        return self._text_edit_range
+
     def build_items(self, completions: List[Completion]):
         for completion in completions:
-
-            if self._text_edit_range is None:
-                prefix_len = completion.get_completion_prefix_length()
-                self._text_edit_range = {
-                    "start": {
-                        "line": self.params.line,
-                        "character": self.params.character - prefix_len,
-                    },
-                    "end": {
-                        "line": self.params.line,
-                        "character": self.params.character,
-                    },
-                }
 
             text = completion.name
             try:
@@ -79,7 +97,7 @@ class CompletionService(Services):
                 "sortText": text,
                 "filterText": text,
                 "insertTextFormat": 1,  # insert format = text
-                "textEdit": {"range": self._text_edit_range, "newText": text,},
+                "textEdit": {"range": self.get_text_edit_range(), "newText": text,},
             }
 
             if name_type in {"class", "function", "property"}:
