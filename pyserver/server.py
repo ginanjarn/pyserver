@@ -198,6 +198,10 @@ class LSPServer(Commands):
             try:
                 params = self.exec_command("textDocument/publishDiagnostics", params)
                 self.send_notification("textDocument/publishDiagnostics", params)
+
+            except errors.InvalidResource:
+                # ignore document which not in project
+                pass
             except Exception as err:
                 LOGGER.error(err, exc_info=True)
 
