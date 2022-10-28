@@ -29,8 +29,9 @@ class FormattingService(Services):
 
     signature_regex = re.compile(r"@@\ \-(\d+)(?:,(\d+))?\ \+(\d+)(?:,(\d+))? @@")
 
-    def build_items(self, diff_text: str):
-        origin_lines = self.params.text.split("\n")
+    @staticmethod
+    def build_items(diff_text: str, origin: str):
+        origin_lines = origin.split("\n")
         diff_lines = diff_text.split("\n")
 
         item_range = None
@@ -56,7 +57,7 @@ class FormattingService(Services):
                 if item_range:
                     yield {"range": item_range, "newText": "\n".join(buffer)}
 
-                match = self.signature_regex.match(line)
+                match = FormattingService.signature_regex.match(line)
                 if not match:
                     raise ValueError("unable parse diff signature")
 
@@ -90,4 +91,4 @@ class FormattingService(Services):
             self.params.file_name,
             self.params.file_name,
         )
-        return list(self.build_items(diff_text))
+        return list(self.build_items(diff_text, self.params.text))
