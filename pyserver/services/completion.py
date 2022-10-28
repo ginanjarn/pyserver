@@ -42,7 +42,7 @@ class CompletionService(Services):
             "class": 7,
             "instance": 5,
             "function": 3,
-            "params": 5,
+            "param": 5,
             "path": 17,
             "keyword": 14,
             "property": 10,
