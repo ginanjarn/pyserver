@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from difflib import unified_diff
 from typing import Dict, Any
 
 from jedi import Script, Project
@@ -54,7 +55,8 @@ class RenameService(Services):
 
     signature_regex = re.compile(r"@@\ \-(\d+)(?:,(\d+))?\ \+(\d+)(?:,(\d+))? @@")
 
-    def build_diff_items(self, diff_text: str, origin: str):
+    @staticmethod
+    def build_diff_items(diff_text: str, origin: str):
         origin_lines = origin.split("\n")
         diff_lines = diff_text.split("\n")
 
@@ -81,7 +83,7 @@ class RenameService(Services):
                 if item_range:
                     yield {"range": item_range, "newText": "\n".join(buffer)}
 
-                match = self.signature_regex.match(line)
+                match = RenameService.signature_regex.match(line)
                 if not match:
                     raise ValueError("unable parse diff signature")
 
@@ -116,9 +118,19 @@ class RenameService(Services):
                 # use buffered text
                 origin_text = self.params.text
 
-            diff_text = change.get_diff()
-            # normalize newline
-            diff_text = diff_text.replace("\r\n", "\n").replace("\r", "\n")
+            new_text = change.get_new_code()
+            # normalize newlines
+            new_text = new_text.replace("\r\n", "\n").replace("\r", "\n")
+
+            # 'Refactoring.get_diff' method return inconsistent newline result
+            # Use builtin difflib
+            udiff = unified_diff(
+                origin_text.split("\n"),
+                new_text.split("\n"),
+                str(file_path),
+                str(file_path),
+            )
+            diff_text = "\n".join(udiff)
 
             try:
                 document = self.params.workspace.get_document(str(file_path))
