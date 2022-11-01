@@ -25,7 +25,7 @@ class AbstractTransport(ABC):
 
     @abstractmethod
     def get_channel(self) -> queue.Queue:
-        """transport channel"""
+        """received message channel"""
 
     @abstractmethod
     def send_message(self, message: RPCMessage):
@@ -50,6 +50,7 @@ class Stream:
     """
 
     HEADER_ENCODING = "ascii"
+    HEADER_SEPARATOR = b"\r\n\r\n"
 
     def __init__(self, content: bytes = b""):
         self.buffer = [content] if content else []
@@ -92,19 +93,18 @@ class Stream:
 
         def get_content():
             str_buffer = b"".join(self.buffer)
-            separator = b"\r\n\r\n"
 
             if not str_buffer:
                 raise EOFError("buffer empty")
 
             try:
-                header_end = str_buffer.index(separator)
+                header_end = str_buffer.index(self.HEADER_SEPARATOR)
                 content_length = self._get_content_length(str_buffer[:header_end])
 
             except ValueError as err:
                 raise ParseError(f"header error: {err!r}") from err
 
-            start_index = header_end + len(separator)
+            start_index = header_end + len(self.HEADER_SEPARATOR)
             end_index = start_index + content_length
             content = str_buffer[start_index:end_index]
             recv_len = len(content)
@@ -132,8 +132,8 @@ class Stream:
 
     @staticmethod
     def wrap_content(content: bytes):
-        header = f"Content-Length: {len(content)}"
-        return b"\r\n\r\n".join([header.encode(Stream.HEADER_ENCODING), content])
+        header = f"Content-Length: {len(content)}".encode(Stream.HEADER_ENCODING)
+        return b"".join([header, Stream.HEADER_SEPARATOR, content])
 
 
 class TCPIO(AbstractTransport):

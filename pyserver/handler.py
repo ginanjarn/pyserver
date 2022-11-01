@@ -1,12 +1,12 @@
 """command handler"""
 
 import logging
+from contextlib import contextmanager
 from functools import wraps
-from pathlib import Path
 
 from pyserver import errors
 from pyserver import message
-from pyserver.workspace import Workspace
+from pyserver.workspace import Workspace, Document
 
 from pyserver.services import completion
 from pyserver.services import hover
@@ -46,21 +46,22 @@ class SessionManager:
     """
 
     def __init__(self):
-        self.is_initialized = False
-        self._shutdown = False
+        self.initialized = False
+        self._request_shutdown = False
 
     def initialize(self):
-        self.is_initialized = True
+        self.initialized = True
 
     def shutdown(self):
-        self._shutdown = True
+        self._request_shutdown = True
 
-    def is_valid(self, func):
+    def ready(self, func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            if not self.is_initialized:
+            if not self.initialized:
                 raise errors.ServerNotInitialized
-            if self._shutdown:
+
+            if self._request_shutdown:
                 raise errors.InvalidRequest("waiting 'exit' command")
 
             return func(*args, **kwargs)
@@ -68,48 +69,57 @@ class SessionManager:
         return wrapper
 
 
-# session manager
-session = SessionManager()
+@contextmanager
+def VersionedDocument(document: Document):
+    """VersionedDocument check any version modification"""
+
+    pre_version = document.version
+    yield document
+    if document.version != pre_version:
+        raise errors.ContentModified
 
 
 class LSPHandler(BaseHandler):
+    """LSPHandler implementation"""
+
+    # session manager
+    session = SessionManager()
+
     def __init__(self):
         self.workspace = None
-
-    def handle_s_cancelrequest(self, params: dict):
-        # $/cancelRequest not implemented
-        pass
 
     def handle_initialized(self, params: dict) -> None:
         if not self.workspace:
             raise errors.InternalError("workspace not defined")
 
-        session.initialize()
+        self.session.initialize()
         return None
 
-    @session.is_valid
+    @session.ready
     def handle_shutdown(self, params: dict) -> None:
-        session.shutdown()
+        self.session.shutdown()
         return None
 
     def handle_initialize(self, params: dict) -> dict:
-        if session.is_initialized:
+        if self.session.initialized:
             raise errors.ServerNotInitialized
+
         try:
-            root_path = params["rootPath"]
+            if root_uri := params.get("rootUri"):
+                root_path = message.uri_to_path(root_uri)
+            else:
+                root_path = params["rootPath"]
+
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
-
-        if not Path(root_path).is_dir():
-            raise errors.InvalidParams(f"{root_path!r} is not directory")
 
         # setup workspace
         self.workspace = Workspace(root_path)
 
         return {}
 
-    @session.is_valid
+    @session.ready
     def handle_textdocument_didopen(self, params: dict) -> None:
         LOGGER.debug(f"didopen params: {params}")
         try:
@@ -123,13 +133,12 @@ class LSPHandler(BaseHandler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         self.workspace.open_document(file_name, language_id, version, text)
-        # LOGGER.debug(self.workspace)
 
-    @session.is_valid
+    @session.ready
     def handle_textdocument_didsave(self, params: dict) -> None:
         LOGGER.debug(f"didsave params: {params}")
 
-    @session.is_valid
+    @session.ready
     def handle_textdocument_didclose(self, params: dict) -> None:
         try:
             file_name = message.uri_to_path(params["textDocument"]["uri"])
@@ -138,9 +147,8 @@ class LSPHandler(BaseHandler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         self.workspace.close_document(file_name)
-        LOGGER.debug(self.workspace)
 
-    @session.is_valid
+    @session.ready
     def handle_textdocument_didchange(self, params: dict) -> None:
         try:
             file_name = message.uri_to_path(params["textDocument"]["uri"])
@@ -151,7 +159,7 @@ class LSPHandler(BaseHandler):
 
         self.workspace.get_document(file_name).did_change(content_changes)
 
-    @session.is_valid
+    @session.ready
     def handle_textdocument_completion(self, params: dict) -> None:
         try:
             file_name = message.uri_to_path(params["textDocument"]["uri"])
@@ -161,23 +169,18 @@ class LSPHandler(BaseHandler):
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        document = self.workspace.get_document(file_name)
-        pre_version = document.version
-        text = document.text
         root_path = self.workspace.root_path
+        document = self.workspace.get_document(file_name)
+        text = document.text
 
-        params = completion.CompletionParams(
-            root_path, file_name, text, line, character
-        )
-        service = completion.CompletionService(params)
-        result = service.get_result()
+        with VersionedDocument(document) as document:
+            params = completion.CompletionParams(
+                root_path, file_name, text, line, character
+            )
+            service = completion.CompletionService(params)
+            return service.get_result()
 
-        if document.version != pre_version:
-            raise errors.InvalidRequest("content modified")
-
-        return result
-
-    @session.is_valid
+    @session.ready
     def handle_textdocument_hover(self, params: dict) -> None:
         try:
             file_name = message.uri_to_path(params["textDocument"]["uri"])
@@ -187,21 +190,16 @@ class LSPHandler(BaseHandler):
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        document = self.workspace.get_document(file_name)
-        pre_version = document.version
-        text = document.text
         root_path = self.workspace.root_path
+        document = self.workspace.get_document(file_name)
+        text = document.text
 
-        params = hover.HoverParams(root_path, file_name, text, line, character)
-        service = hover.HoverService(params)
-        result = service.get_result()
+        with VersionedDocument(document) as document:
+            params = hover.HoverParams(root_path, file_name, text, line, character)
+            service = hover.HoverService(params)
+            return service.get_result()
 
-        if document.version != pre_version:
-            raise errors.InvalidRequest("content modified")
-
-        return result
-
-    @session.is_valid
+    @session.ready
     def handle_textdocument_formatting(self, params: dict) -> None:
         try:
             file_name = message.uri_to_path(params["textDocument"]["uri"])
@@ -210,19 +208,14 @@ class LSPHandler(BaseHandler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         document = self.workspace.get_document(file_name)
-        pre_version = document.version
         text = document.text
 
-        params = formatting.FormattingParams(file_name, text)
-        service = formatting.FormattingService(params)
-        result = service.get_result()
+        with VersionedDocument(document) as document:
+            params = formatting.FormattingParams(file_name, text)
+            service = formatting.FormattingService(params)
+            return service.get_result()
 
-        if document.version != pre_version:
-            raise errors.InvalidRequest("content modified")
-
-        return result
-
-    @session.is_valid
+    @session.ready
     def handle_textdocument_definition(self, params: dict) -> None:
         try:
             file_name = message.uri_to_path(params["textDocument"]["uri"])
@@ -232,16 +225,18 @@ class LSPHandler(BaseHandler):
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        text = self.workspace.get_document(file_name).text
         root_path = self.workspace.root_path
+        document = self.workspace.get_document(file_name)
+        text = document.text
 
-        params = definition.DefinitionParams(
-            root_path, file_name, text, line, character
-        )
-        service = definition.DefinitionService(params)
-        return service.get_result()
+        with VersionedDocument(document) as document:
+            params = definition.DefinitionParams(
+                root_path, file_name, text, line, character
+            )
+            service = definition.DefinitionService(params)
+            return service.get_result()
 
-    @session.is_valid
+    @session.ready
     def handle_textdocument_publishdiagnostics(self, params: dict):
         try:
             file_name = message.uri_to_path(params["textDocument"]["uri"])
@@ -252,12 +247,13 @@ class LSPHandler(BaseHandler):
         document = self.workspace.get_document(file_name)
         text = document.text
         version = document.version
+
         params = diagnostics.DiagnosticParams(file_name, text, version)
         service = diagnostics.DiagnosticService(params)
         result = service.get_result()
         return result
 
-    @session.is_valid
+    @session.ready
     def handle_textdocument_preparerename(self, params: dict) -> None:
         try:
             file_name = message.uri_to_path(params["textDocument"]["uri"])
@@ -269,13 +265,15 @@ class LSPHandler(BaseHandler):
 
         document = self.workspace.get_document(file_name)
         text = document.text
-        params = prepare_rename.PrepareRenameParams(
-            self.workspace.root_path, file_name, text, line, character
-        )
-        service = prepare_rename.PrepareRenameService(params)
-        return service.get_result()
 
-    @session.is_valid
+        with VersionedDocument(document) as document:
+            params = prepare_rename.PrepareRenameParams(
+                self.workspace.root_path, file_name, text, line, character
+            )
+            service = prepare_rename.PrepareRenameService(params)
+            return service.get_result()
+
+    @session.ready
     def handle_textdocument_rename(self, params: dict) -> None:
         try:
             file_name = message.uri_to_path(params["textDocument"]["uri"])
@@ -286,8 +284,11 @@ class LSPHandler(BaseHandler):
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        params = rename.RenameParams(
-            self.workspace, file_name, line, character, new_name
-        )
-        service = rename.RenameService(params)
-        return service.get_result()
+        document = self.workspace.get_document(file_name)
+
+        with VersionedDocument(document) as document:
+            params = rename.RenameParams(
+                self.workspace, file_name, line, character, new_name
+            )
+            service = rename.RenameService(params)
+            return service.get_result()

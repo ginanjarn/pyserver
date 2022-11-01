@@ -60,6 +60,18 @@ class InvalidResource(InternalError):
     message = "invalid resource"
 
 
+class RequestCanceled(InternalError):
+    """request canceled"""
+
+    message = "request canceled"
+
+
+class ContentModified(InternalError):
+    """content modified"""
+
+    message = "content modified"
+
+
 def transform_error(err: Union[BaseRPCError, Exception, None]) -> Dict[str, Any]:
     """transform exception to rpc error"""
     if not err:

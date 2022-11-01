@@ -3,6 +3,8 @@
 import logging
 import threading
 import queue
+from collections import namedtuple
+from functools import lru_cache
 from typing import Optional, Any, Callable
 
 from pyserver import errors
@@ -18,20 +20,79 @@ STREAM_HANDLER.setFormatter(logging.Formatter(LOG_TEMPLATE))
 LOGGER.addHandler(STREAM_HANDLER)
 
 
+RequestData = namedtuple("RequestData", ["id_", "method", "params"])
+
+
+class RequestHandler:
+    """RequestHandler executed outside main loop to make request cancelable"""
+
+    def __init__(
+        self,
+        exec_callback: Callable[[int, str, dict], Any],
+        respond_callback: Callable[[int, Any, Any], None],
+    ):
+        self.requests = queue.Queue()
+        self.canceled_requests = set()
+
+        self.exec_callback = exec_callback
+        self.respond_callback = respond_callback
+
+    def add(self, request_id, method, params):
+        self.requests.put(RequestData(request_id, method, params))
+
+    def cancel(self, request_id: int):
+        self.canceled_requests.add(request_id)
+
+    def check_canceled(self, request_id: int):
+        if request_id in self.canceled_requests:
+            self.canceled_requests.remove(request_id)
+            raise errors.RequestCanceled(f'request canceled "{request_id}"')
+
+    def execute(self, req: RequestData):
+        LOGGER.info(f"Exec Request: {req.method!r} {req.params}")
+        result, error = None, None
+
+        try:
+            self.check_canceled(req.id_)
+            result = self.exec_callback(req.method, req.params)
+            self.check_canceled(req.id_)
+
+        except errors.RequestCanceled as err:
+            error = err
+        except Exception as err:
+            LOGGER.error(err, exc_info=True)
+            error = err
+
+        self.respond_callback(req.id_, result, errors.transform_error(error))
+
+    def _run(self):
+        while True:
+            message = self.requests.get()
+            self.execute(message)
+
+    def run(self):
+        thread = threading.Thread(target=self._run, daemon=True)
+        thread.start()
+
+
 class Commands:
     """commands interface"""
 
     def __init__(self, transport: AbstractTransport):
         self.transport = transport
-        self.current_req_id = 0
+        self.request_id = 0
         self.request_map = {}
 
-    def next_request_id(self):
-        self.current_req_id += 1
-        return self.current_req_id
+    def get_new_request_id(self):
+        self.request_id += 1
+        return self.request_id
+
+    def send_message(self, message: RPCMessage):
+        LOGGER.debug(f"Send >> {message}")
+        self.transport.send_message(message)
 
     def send_request(self, method: str, params: Any):
-        request_id = self.next_request_id()
+        request_id = self.get_new_request_id()
         message = RPCMessage.request(request_id, method, params)
 
         if self.request_map:
@@ -42,7 +103,7 @@ class Commands:
                     self.cancel_request(req_id)
 
         self.request_map[request_id] = method
-        self.transport.send_message(message)
+        self.send_message(message)
 
     def cancel_request(self, request_id: int):
         del self.request_map[request_id]
@@ -51,74 +112,10 @@ class Commands:
     def send_response(
         self, request_id: int, result: Optional[Any] = None, error: Optional[Any] = None
     ):
-        self.transport.send_message(RPCMessage.response(request_id, result, error))
+        self.send_message(RPCMessage.response(request_id, result, error))
 
     def send_notification(self, method: str, params: Any):
-        self.transport.send_message(RPCMessage.notification(method, params))
-
-
-class RequestHandler:
-    def __init__(
-        self,
-        exec_callback: Callable[[RPCMessage], Any],
-        write_callback: Callable[[RPCMessage], None],
-    ):
-        self.requests = queue.Queue()
-        self.canceled_requests = set()
-
-        self.exec_callback = exec_callback
-        self.write_callback = write_callback
-
-        self.lock = threading.Lock()
-
-    def add(self, message: RPCMessage):
-        self.requests.put(message)
-
-    def cancel(self, id_: int):
-        self.canceled_requests.add(id_)
-
-    def is_canceled(self, id_: int):
-
-        try:
-            self.canceled_requests.remove(id_)
-            return True
-        except KeyError:
-            return False
-
-    def execute(self, message: RPCMessage):
-        LOGGER.debug(f"execute message: {message}")
-        result, error = None, None
-        id_ = message["id"]
-
-        # check request cancelation before and after exec request
-
-        if self.is_canceled(id_):
-            error = errors.InvalidRequest(f"request canceled {id_!r}")
-
-        else:
-            # execute
-            try:
-                result = self.exec_callback(message)
-            except Exception as err:
-                LOGGER.error(err, exc_info=True)
-                error = err
-
-        if self.is_canceled(id_):
-            error = errors.InvalidRequest(f"request canceled {id_!r}")
-
-        result_message = RPCMessage.response(id_, result, errors.transform_error(error))
-        LOGGER.debug(result_message)
-        self.write_callback(result_message)
-
-    def _run(self):
-        while True:
-            with self.lock:
-                message = self.requests.get()
-                self.execute(message)
-
-    def run(self):
-        thread = threading.Thread(target=self._run, daemon=True)
-        thread.start()
+        self.send_message(RPCMessage.notification(method, params))
 
 
 class LSPServer(Commands):
@@ -128,11 +125,9 @@ class LSPServer(Commands):
         super().__init__(transport)
 
         self.transport_channel = self.transport.get_channel()
-        self.handler: BaseHandler = handler
+        self.handler = handler
 
-        self.request_handler = RequestHandler(
-            self.exec_request, self.transport.send_message
-        )
+        self.request_handler = RequestHandler(self.exec_command, self.send_response)
 
         self._publish_diagnostic_lock = threading.Lock()
         self._listen_lock = threading.Lock()
@@ -153,6 +148,16 @@ class LSPServer(Commands):
 
     def _listen_message(self):
         stream = Stream()
+
+        def exec_buffered_message():
+            for content in stream.get_contents():
+                message = RPCMessage.from_bytes(content)
+                LOGGER.debug(f"Received << {message}")
+                try:
+                    self.exec_message(message)
+                except Exception as err:
+                    LOGGER.error(err, exc_info=True)
+
         while True:
             # this scope must thread-locked to prevent shuffled chunk
             with self._listen_lock:
@@ -161,13 +166,23 @@ class LSPServer(Commands):
                 if not chunk:
                     return
 
-                for content in stream.get_contents():
-                    message = RPCMessage.from_bytes(content)
-                    LOGGER.debug(f"Received << {message}")
-                    try:
-                        self.exec_message(message)
-                    except Exception as err:
-                        LOGGER.error(err, exc_info=True)
+                exec_buffered_message()
+
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def flatten_method(method: str):
+        """flatten method to lower case and replace character to valid identifier name"""
+        flat_method = method.lower().replace("/", "_").replace("$", "s")
+        return f"handle_{flat_method}"
+
+    def exec_command(self, method: str, params: RPCMessage):
+        try:
+            func = getattr(self.handler, self.flatten_method(method))
+        except AttributeError:
+            raise errors.MethodNotFound(f"method not found {method!r}")
+
+        # exec function
+        return func(params)
 
     def exec_notification(self, method, params):
         LOGGER.info(f"Exec Notification: {method!r} {params}")
@@ -196,8 +211,12 @@ class LSPServer(Commands):
 
         with self._publish_diagnostic_lock:
             try:
-                params = self.exec_command("textDocument/publishDiagnostics", params)
-                self.send_notification("textDocument/publishDiagnostics", params)
+                diagnostic_params = self.exec_command(
+                    "textDocument/publishDiagnostics", params
+                )
+                self.send_notification(
+                    "textDocument/publishDiagnostics", diagnostic_params
+                )
 
             except errors.InvalidResource:
                 # ignore document which not in project
@@ -208,53 +227,32 @@ class LSPServer(Commands):
     def exec_response(self, message: RPCMessage):
         LOGGER.info(f"Exec Response: {message}")
         try:
-            method = self.request_map.pop(message["id"])
-        except KeyError as err:
             if error := message.get("error"):
                 LOGGER.info(error["message"])
                 return
-            raise Exception(f"invalid response 'id': {err}")
 
-        try:
+            method = self.request_map.pop(message["id"])
+
+        except KeyError:
+            LOGGER.info(f"invalid response {message['id']}")
+        else:
             self.exec_command(method, message)
-        except Exception as err:
-            LOGGER.error(err, exc_info=True)
-
-    @staticmethod
-    def flatten_method(method: str):
-        """flatten method to lower case and replace character to valid identifier name"""
-        flat_method = method.lower().replace("/", "_").replace("$", "s")
-        return f"handle_{flat_method}"
-
-    def exec_command(self, method: str, params: RPCMessage):
-        try:
-            func = getattr(self.handler, self.flatten_method(method))
-        except AttributeError:
-            raise errors.MethodNotFound(f"method not found {method!r}")
-
-        # exec function
-        return func(params)
-
-    def exec_request(self, message: RPCMessage):
-        method = message["method"]
-        params = message["params"]
-        LOGGER.info(f"Exec Request {method!r} {params}")
-        return self.exec_command(method, params)
 
     def exec_message(self, message: RPCMessage):
         """exec received message"""
 
-        message_id = message.get("id")
-        message_method = message.get("method")
-        if message_method:
+        msg_id = message.get("id")
+        method = message.get("method")
+
+        if method:
             params = message.get("params")
-            if message_id is not None:
-                self.request_handler.add(message)
 
+            if msg_id is None:
+                self.exec_notification(method, params)
             else:
-                self.exec_notification(message_method, params)
+                self.request_handler.add(msg_id, method, params)
 
-        elif message_id is not None:
+        elif msg_id is not None:
             self.exec_response(message)
         else:
             LOGGER.error(f"invalid message: {message}")

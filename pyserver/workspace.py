@@ -1,6 +1,7 @@
 """workspace objects"""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Dict
 
 from pyserver import errors
@@ -64,6 +65,9 @@ class Workspace:
     def __init__(self, root_path: str):
         self.root_path = root_path
         self.documents: Dict[str, Document] = {}
+
+        if not Path(root_path).is_dir():
+            raise errors.InternalError(f"{root_path!r} is not directory")
 
     def __repr__(self):
         return f"Workspace(root_path={self.root_path!r},documents={self.documents!r})"
