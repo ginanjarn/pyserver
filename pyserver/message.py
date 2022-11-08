@@ -1,6 +1,7 @@
 """message handler"""
 
 import json
+from functools import lru_cache
 from urllib.parse import urlparse, urlunparse, quote, unquote
 from urllib.request import pathname2url, url2pathname
 
@@ -73,9 +74,11 @@ class DocumentURI(str):
         return url2pathname(unquote(urlparse(self).path))
 
 
+@lru_cache(128)
 def path_to_uri(path: str):
     return DocumentURI.from_path(path)
 
 
+@lru_cache(128)
 def uri_to_path(uri: str):
     return DocumentURI(uri).to_path()
