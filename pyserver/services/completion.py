@@ -50,7 +50,8 @@ class CompletionService(Services):
         },
     )
 
-    identifier_pattern = re.compile(r"[a-zA-Z]\w*")
+    # indentifier started by alphabet or understrip followed by alphanumeric
+    identifier_pattern = re.compile(r"[_a-zA-Z]\w*")
 
     def get_text_edit_range(self):
         if self._text_edit_range:
