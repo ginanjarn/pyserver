@@ -136,6 +136,10 @@ class Stream:
         return b"".join([header, Stream.HEADER_SEPARATOR, content])
 
 
+class AddressInUse(OSError):
+    """socket address has used by other process"""
+
+
 class TCPIO(AbstractTransport):
     """TCPIO Transport implementation"""
 
@@ -170,36 +174,47 @@ class TCPIO(AbstractTransport):
         """listen stdout task"""
 
         while True:
-            buf = self.conn.recv(self.BUFFER_LENGTH)
-            self._channel.put(buf)
-            LOGGER.debug(f"buf: {buf}")
+            if buf := self.conn.recv(self.BUFFER_LENGTH):
+                self._channel.put(buf)
+                continue
 
-            if not buf:
-                LOGGER.debug("connection closed")
-                return
+            LOGGER.debug("connection closed")
+            return
 
     def listen(self):
         """listen PIPE"""
         LOGGER.info("listen")
 
+        def print_stderr(value):
+            """print to stderr"""
+            print(value, file=sys.stderr)
+
         try:
-            self._sock.bind(self.address)
+            try:
+                self._sock.bind(self.address)
+            except OSError as err:
+                # OSError raised if address has used by other process
+                raise AddressInUse(err) from err
+
             self._sock.listen()
-            print(
-                f"listening connection at {self.address}", file=sys.stderr,
-            )
+            print_stderr(f"listening connection at {self.address}")
 
             self.conn, addr = self._sock.accept()
-            print(f"accept connection from {addr}", file=sys.stderr)
+            print_stderr(f"accept connection from {addr}")
 
+            # listen until socket closed
             self._listen_socket()
 
         except ConnectionError as err:
             LOGGER.debug(err)
 
         except socket.timeout:
-            print(f"no connection at {self.timeout} second(s).\nexit...")
+            print_stderr(f"no connection at {self.timeout} second(s).\nexit...")
             sys.exit(0)
+
+        except AddressInUse as err:
+            print_stderr(err)
+            sys.exit(1)
 
     def terminate(self):
         """terminate process"""
