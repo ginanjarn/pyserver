@@ -71,6 +71,11 @@ class ContentModified(InternalError):
 
     message = "content modified"
 
+class FeatureDisabled(InternalError):
+    """feature disabled"""
+
+    message = "feature disabled"
+
 
 def transform_error(err: Union[BaseRPCError, Exception, None]) -> Dict[str, Any]:
     """transform exception to rpc error"""

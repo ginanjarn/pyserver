@@ -59,6 +59,8 @@ class RequestHandler:
 
         except errors.RequestCanceled as err:
             error = err
+        except errors.FeatureDisabled as err:
+            error = err
         except Exception as err:
             LOGGER.error(err, exc_info=True)
             error = err
@@ -221,6 +223,8 @@ class LSPServer(Commands):
             except errors.InvalidResource:
                 # ignore document which not in project
                 pass
+            except errors.FeatureDisabled:
+                LOGGER.info("feature disabled")
             except Exception as err:
                 LOGGER.error(err, exc_info=True)
 
