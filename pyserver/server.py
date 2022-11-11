@@ -1,16 +1,18 @@
 """LSP implementation"""
 
 import logging
-import threading
 import queue
+import re
+import threading
 from collections import namedtuple
 from functools import lru_cache
-from typing import Optional, Any, Callable
+from typing import Optional, Any, Callable, Iterator
 
 from pyserver import errors
+from pyserver.errors import ParseError, ContentIncomplete
 from pyserver.handler import BaseHandler
 from pyserver.message import RPCMessage
-from pyserver.transport import AbstractTransport, Stream
+from pyserver.transport import AbstractTransport
 
 LOGGER = logging.getLogger(__name__)
 # LOGGER.setLevel(logging.DEBUG)  # module logging level
@@ -18,6 +20,102 @@ STREAM_HANDLER = logging.StreamHandler()
 LOG_TEMPLATE = "%(levelname)s %(asctime)s %(filename)s:%(lineno)s  %(message)s"
 STREAM_HANDLER.setFormatter(logging.Formatter(LOG_TEMPLATE))
 LOGGER.addHandler(STREAM_HANDLER)
+
+
+class Stream:
+    r"""stream object
+
+    This class handle JSONRPC stream format
+        '<header>\r\n<content>'
+
+    Header items must seperated by '\r\n'
+    """
+
+    HEADER_ENCODING = "ascii"
+    HEADER_SEPARATOR = b"\r\n\r\n"
+
+    def __init__(self, content: bytes = b""):
+        self.buffer = [content] if content else []
+        self._lock = threading.RLock()
+
+    def clear(self):
+        """clear buffer"""
+        with self._lock:
+            self.buffer = []
+
+    def put(self, data: bytes) -> None:
+        """put stream data"""
+        with self._lock:
+            self.buffer.append(data)
+
+    _content_length_pattern = re.compile(r"^Content-Length: (\d+)", flags=re.MULTILINE)
+
+    def _get_content_length(self, headers: bytes) -> int:
+        """get Content-Length"""
+
+        if found := self._content_length_pattern.search(
+            headers.decode(self.HEADER_ENCODING)
+        ):
+            return int(found.group(1))
+        raise ValueError("unable find 'Content-Length'")
+
+    def get_contents(self) -> Iterator[bytes]:
+        """get contents
+
+        Yield
+        ------
+        content: bytes
+
+        Raises:
+        -------
+        ParseError
+        EOFError
+        ContentIncomplete
+        """
+
+        def get_content():
+            str_buffer = b"".join(self.buffer)
+
+            if not str_buffer:
+                raise EOFError("buffer empty")
+
+            try:
+                header_end = str_buffer.index(self.HEADER_SEPARATOR)
+                content_length = self._get_content_length(str_buffer[:header_end])
+
+            except ValueError as err:
+                raise ParseError(f"header error: {err!r}") from err
+
+            start_index = header_end + len(self.HEADER_SEPARATOR)
+            end_index = start_index + content_length
+            content = str_buffer[start_index:end_index]
+            recv_len = len(content)
+
+            if recv_len < content_length:
+                raise ContentIncomplete(f"want: {content_length}, expected: {recv_len}")
+
+            # replace buffer
+            self.buffer = [str_buffer[end_index:]]
+            return content
+
+        while True:
+            with self._lock:
+                try:
+                    content = get_content()
+                except (EOFError, ContentIncomplete):
+                    break
+                except Exception as err:
+                    LOGGER.error(err)
+                    # clean up buffer
+                    self.clear()
+                    break
+                else:
+                    yield content
+
+    @staticmethod
+    def wrap_content(content: bytes):
+        header = f"Content-Length: {len(content)}".encode(Stream.HEADER_ENCODING)
+        return b"".join([header, Stream.HEADER_SEPARATOR, content])
 
 
 RequestData = namedtuple("RequestData", ["id_", "method", "params"])
@@ -91,7 +189,8 @@ class Commands:
 
     def send_message(self, message: RPCMessage):
         LOGGER.debug(f"Send >> {message}")
-        self.transport.send_message(message)
+        content = message.to_bytes()
+        self.transport.send(Stream.wrap_content(content))
 
     def send_request(self, method: str, params: Any):
         request_id = self.get_new_request_id()
@@ -126,25 +225,20 @@ class LSPServer(Commands):
     def __init__(self, transport: AbstractTransport, handler: BaseHandler, /):
         super().__init__(transport)
 
-        self.transport_channel = self.transport.get_channel()
         self.handler = handler
-
         self.request_handler = RequestHandler(self.exec_command, self.send_response)
 
         self._publish_diagnostic_lock = threading.Lock()
-        self._listen_lock = threading.Lock()
 
     def listen(self):
         """listen remote"""
 
-        # listen message
-        thread = threading.Thread(target=self._listen_message, daemon=True)
-        thread.start()
-
         self.request_handler.run()
+
+        threading.Thread(target=self._listen_message, daemon=True).start()
         self.transport.listen()
 
-    def shutdown_server(self):
+    def shutdown(self):
         """shutdown server"""
         self.transport.terminate()
 
@@ -161,14 +255,12 @@ class LSPServer(Commands):
                     LOGGER.error(err, exc_info=True)
 
         while True:
-            # this scope must thread-locked to prevent shuffled chunk
-            with self._listen_lock:
-                chunk = self.transport_channel.get()
-                stream.put(chunk)
-                if not chunk:
-                    return
+            chunk = self.transport.poll()
+            stream.put(chunk)
+            if not chunk:
+                return
 
-                exec_buffered_message()
+            exec_buffered_message()
 
     @staticmethod
     @lru_cache(maxsize=128)
@@ -190,7 +282,7 @@ class LSPServer(Commands):
         LOGGER.info(f"Exec Notification: {method!r} {params}")
 
         if method == "exit":
-            self.shutdown_server()
+            self.shutdown()
             return
 
         if method == "$/cancelRequest":

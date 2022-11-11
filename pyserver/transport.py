@@ -1,16 +1,10 @@
 """transport handler"""
 
 import logging
-import queue
-import re
 import socket
 import sys
 import threading
 from abc import ABC, abstractmethod
-from typing import Iterator
-
-from pyserver.message import RPCMessage
-from pyserver.errors import ParseError, ContentIncomplete
 
 LOGGER = logging.getLogger(__name__)
 # LOGGER.setLevel(logging.DEBUG)  # module logging level
@@ -21,119 +15,37 @@ LOGGER.addHandler(STREAM_HANDLER)
 
 
 class AbstractTransport(ABC):
-    """abstract transport"""
+    """AbstractTransport
+
+    Transport provide connection to remote.
+    Fetch and send data handled by user class.
+
+    methods:
+    * send() -> send message to remote
+    * poll() -> poll message from remote
+    * listen() -> listen connection
+    * terminate() -> terminate connection
+
+    """
 
     @abstractmethod
-    def get_channel(self) -> queue.Queue:
-        """received message channel"""
+    def poll(self) -> bytes:
+        """poll message
+
+        poll() must run in separated thread to listen() or will deadlock
+        """
 
     @abstractmethod
-    def send_message(self, message: RPCMessage):
+    def send(self, data: bytes):
         """send message"""
 
     @abstractmethod
     def listen(self):
-        """listen server message"""
+        """listen connection"""
 
     @abstractmethod
     def terminate(self):
-        """terminate"""
-
-
-class Stream:
-    r"""stream object
-
-    This class handle JSONRPC stream format
-        '<header>\r\n<content>'
-    
-    Header items must seperated by '\r\n'
-    """
-
-    HEADER_ENCODING = "ascii"
-    HEADER_SEPARATOR = b"\r\n\r\n"
-
-    def __init__(self, content: bytes = b""):
-        self.buffer = [content] if content else []
-        self._lock = threading.RLock()
-
-    def clear(self):
-        """clear buffer"""
-        with self._lock:
-            self.buffer = []
-
-    def put(self, data: bytes) -> None:
-        """put stream data"""
-        with self._lock:
-            self.buffer.append(data)
-
-    _content_length_pattern = re.compile(r"^Content-Length: (\d+)", flags=re.MULTILINE)
-
-    def _get_content_length(self, headers: bytes) -> int:
-        """get Content-Length"""
-
-        if found := self._content_length_pattern.search(
-            headers.decode(self.HEADER_ENCODING)
-        ):
-            return int(found.group(1))
-        raise ValueError("unable find 'Content-Length'")
-
-    def get_contents(self) -> Iterator[bytes]:
-        """get contents
-
-        Yield
-        ------
-        content: bytes
-
-        Raises:
-        -------
-        ParseError
-        EOFError
-        ContentIncomplete
-        """
-
-        def get_content():
-            str_buffer = b"".join(self.buffer)
-
-            if not str_buffer:
-                raise EOFError("buffer empty")
-
-            try:
-                header_end = str_buffer.index(self.HEADER_SEPARATOR)
-                content_length = self._get_content_length(str_buffer[:header_end])
-
-            except ValueError as err:
-                raise ParseError(f"header error: {err!r}") from err
-
-            start_index = header_end + len(self.HEADER_SEPARATOR)
-            end_index = start_index + content_length
-            content = str_buffer[start_index:end_index]
-            recv_len = len(content)
-
-            if recv_len < content_length:
-                raise ContentIncomplete(f"want: {content_length}, expected: {recv_len}")
-
-            # replace buffer
-            self.buffer = [str_buffer[end_index:]]
-            return content
-
-        while True:
-            with self._lock:
-                try:
-                    content = get_content()
-                except (EOFError, ContentIncomplete):
-                    break
-                except Exception as err:
-                    LOGGER.error(err)
-                    # clean up buffer
-                    self.clear()
-                    break
-                else:
-                    yield content
-
-    @staticmethod
-    def wrap_content(content: bytes):
-        header = f"Content-Length: {len(content)}".encode(Stream.HEADER_ENCODING)
-        return b"".join([header, Stream.HEADER_SEPARATOR, content])
+        """terminate connection"""
 
 
 class AddressInUse(OSError):
@@ -149,79 +61,88 @@ class TCPIO(AbstractTransport):
 
     def __init__(self, timeout=None):
 
-        # set default queue
-        self._channel = queue.Queue()
-
         self.address = self.DEFAULT_ADDRESS
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.conn = None
+        self.conn: socket.socket = None
+
+        self.listen_event = threading.Event()
+        self.connect_event = threading.Event()
+        self._shutdown = False
 
         self.timeout = timeout
         if timeout is None or timeout < 0:
             self.timeout = self.DEFAULT_TIMEOUT
-        self._sock.settimeout(self.timeout)
 
-    def get_channel(self) -> queue.Queue:
-        return self._channel
+    def send(self, data: bytes):
+        self.conn.sendall(data)
 
-    def send_message(self, message: RPCMessage):
-        LOGGER.debug(f"Send >> {message}")
+    def poll(self):
+        LOGGER.info("poll")
+        self.connect_event.wait()
 
-        bmessage = Stream.wrap_content(message.to_bytes())
-        self.conn.sendall(bmessage)
+        if self._shutdown or self.conn is None:
+            self.terminate()
+            return b""
 
-    def _listen_socket(self):
-        """listen stdout task"""
+        try:
+            if chunk := self.conn.recv(self.BUFFER_LENGTH):
+                return chunk
 
-        while True:
-            if buf := self.conn.recv(self.BUFFER_LENGTH):
-                self._channel.put(buf)
-                continue
+        except Exception as err:
+            self.terminate()
 
-            LOGGER.debug("connection closed")
-            return
+            if not isinstance(err, ConnectionError):
+                raise err
+
+            LOGGER.debug(err)
+            return b""
 
     def listen(self):
-        """listen PIPE"""
         LOGGER.info("listen")
 
-        def print_stderr(value):
+        self.listen_event.clear()
+        self.connect_event.clear()
+
+        def printerr(value):
             """print to stderr"""
             print(value, file=sys.stderr)
 
         try:
-            try:
-                self._sock.bind(self.address)
-            except OSError as err:
-                # OSError raised if address has used by other process
-                raise AddressInUse(err) from err
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(self.timeout)
 
-            self._sock.listen()
-            print_stderr(f"listening connection at {self.address}")
+                try:
+                    sock.bind(self.address)
+                except OSError as err:
+                    # OSError raised if address has used by other process
+                    raise AddressInUse(err) from err
 
-            self.conn, addr = self._sock.accept()
-            print_stderr(f"accept connection from {addr}")
+                sock.listen()
+                printerr(f"listening connection at {self.address}")
 
-            # listen until socket closed
-            self._listen_socket()
+                self.conn, addr = sock.accept()
+                self.connect_event.set()
+                printerr(f"accept connection from {addr}")
+
+                # listen until socket closed
+                self.listen_event.wait()
 
         except ConnectionError as err:
             LOGGER.debug(err)
 
         except socket.timeout:
-            print_stderr(f"no connection at {self.timeout} second(s).\nexit...")
-            sys.exit(0)
+            printerr(f"no connection at {self.timeout} second(s).\nexit...")
 
         except AddressInUse as err:
-            print_stderr(err)
-            sys.exit(1)
+            printerr(err)
+
+        finally:
+            self.terminate()
 
     def terminate(self):
         """terminate process"""
         LOGGER.info("terminate")
 
-        if self.conn:
-            self.conn.close()
-
-        self._sock.close()
-        sys.exit(0)
+        # '_shutdown' must be 'True' before connect_event.set()
+        self._shutdown = True
+        self.connect_event.set()
+        self.listen_event.set()
