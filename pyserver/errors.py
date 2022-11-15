@@ -1,6 +1,6 @@
 """rpc errors"""
 
-from typing import Union, Dict, Any
+from typing import Union, Dict, Any, Optional
 
 
 class ContentIncomplete(ValueError):
@@ -71,14 +71,18 @@ class ContentModified(InternalError):
 
     message = "content modified"
 
+
 class FeatureDisabled(InternalError):
     """feature disabled"""
 
     message = "feature disabled"
 
 
-def transform_error(err: Union[BaseRPCError, Exception, None]) -> Dict[str, Any]:
+def transform_error(
+    err: Union[BaseRPCError, Exception, None]
+) -> Optional[Dict[str, Any]]:
     """transform exception to rpc error"""
+
     if not err:
         return None
 
@@ -86,5 +90,5 @@ def transform_error(err: Union[BaseRPCError, Exception, None]) -> Dict[str, Any]
         return {"code": err.code, "message": str(err) or err.message}
 
     except AttributeError:
-        # may be not defined in base RPC Error
+        # 'err.code' and 'err.message' may be not defined
         return {"code": InternalError.code, "message": repr(err)}

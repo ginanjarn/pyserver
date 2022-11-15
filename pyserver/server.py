@@ -129,14 +129,14 @@ class RequestHandler:
         exec_callback: Callable[[int, str, dict], Any],
         respond_callback: Callable[[int, Any, Any], None],
     ):
-        self.requests = queue.Queue()
+        self.request_queue = queue.Queue()
         self.canceled_requests = set()
 
         self.exec_callback = exec_callback
         self.respond_callback = respond_callback
 
     def add(self, request_id, method, params):
-        self.requests.put(RequestData(request_id, method, params))
+        self.request_queue.put(RequestData(request_id, method, params))
 
     def cancel(self, request_id: int):
         self.canceled_requests.add(request_id)
@@ -146,14 +146,16 @@ class RequestHandler:
             self.canceled_requests.remove(request_id)
             raise errors.RequestCanceled(f'request canceled "{request_id}"')
 
-    def execute(self, req: RequestData):
-        LOGGER.info(f"Exec Request: {req.method!r} {req.params}")
+    def execute(self, request: RequestData):
+        LOGGER.info(f"Exec Request: {request.method!r} {request.params}")
         result, error = None, None
 
         try:
-            self.check_canceled(req.id_)
-            result = self.exec_callback(req.method, req.params)
-            self.check_canceled(req.id_)
+            self.check_canceled(request.id_)
+            result = self.exec_callback(request.method, request.params)
+
+            # may be request canceled during execute
+            self.check_canceled(request.id_)
 
         except errors.RequestCanceled as err:
             error = err
@@ -163,11 +165,11 @@ class RequestHandler:
             LOGGER.error(err, exc_info=True)
             error = err
 
-        self.respond_callback(req.id_, result, errors.transform_error(error))
+        self.respond_callback(request.id_, result, errors.transform_error(error))
 
     def _run(self):
         while True:
-            message = self.requests.get()
+            message = self.request_queue.get()
             self.execute(message)
 
     def run(self):
@@ -182,8 +184,9 @@ class Commands:
         self.transport = transport
         self.request_id = 0
         self.request_map = {}
+        self.canceled_requests = set()
 
-    def get_new_request_id(self):
+    def new_request_id(self):
         self.request_id += 1
         return self.request_id
 
@@ -193,21 +196,17 @@ class Commands:
         self.transport.send(Stream.wrap_content(content))
 
     def send_request(self, method: str, params: Any):
-        request_id = self.get_new_request_id()
-        message = RPCMessage.request(request_id, method, params)
+        # cancel all previous request
+        for req_id, req_method in self.request_map.items():
+            if req_method == method:
+                self.cancel_request(req_id)
 
-        if self.request_map:
-            # cancel all previous request
-            request_map_c = self.request_map.copy()
-            for req_id, req_method in request_map_c.items():
-                if req_method == method:
-                    self.cancel_request(req_id)
-
+        request_id = self.new_request_id()
         self.request_map[request_id] = method
-        self.send_message(message)
+        self.send_message(RPCMessage.request(request_id, method, params))
 
     def cancel_request(self, request_id: int):
-        del self.request_map[request_id]
+        self.canceled_requests.add(request_id)
         self.send_notification("$/cancelRequest", {"id": request_id})
 
     def send_response(
@@ -228,7 +227,7 @@ class LSPServer(Commands):
         self.handler = handler
         self.request_handler = RequestHandler(self.exec_command, self.send_response)
 
-        self._publish_diagnostic_lock = threading.Lock()
+        self._diagnostics_lock = threading.Lock()
 
     def listen(self):
         """listen remote"""
@@ -256,10 +255,10 @@ class LSPServer(Commands):
 
         while True:
             chunk = self.transport.poll()
-            stream.put(chunk)
             if not chunk:
                 return
 
+            stream.put(chunk)
             exec_buffered_message()
 
     @staticmethod
@@ -278,6 +277,27 @@ class LSPServer(Commands):
         # exec function
         return func(params)
 
+    def _publish_diagnostics(self, params: dict):
+        if self._diagnostics_lock.locked():
+            return
+
+        with self._diagnostics_lock:
+            try:
+                diagnostics_params = self.exec_command(
+                    "textDocument/publishDiagnostics", params
+                )
+                self.send_notification(
+                    "textDocument/publishDiagnostics", diagnostics_params
+                )
+
+            except errors.InvalidResource:
+                # ignore document which not in project
+                pass
+            except errors.FeatureDisabled:
+                LOGGER.info("feature disabled")
+            except Exception as err:
+                LOGGER.error(err, exc_info=True)
+
     def exec_notification(self, method, params):
         LOGGER.info(f"Exec Notification: {method!r} {params}")
 
@@ -294,61 +314,55 @@ class LSPServer(Commands):
         except Exception as err:
             LOGGER.error(err, exc_info=True)
 
-        if self._publish_diagnostic_lock.locked():
-            return
-
-        if method not in {
+        if method in {
             "textDocument/didOpen",
             "textDocument/didChange",
         }:
-            return
-
-        with self._publish_diagnostic_lock:
-            try:
-                diagnostic_params = self.exec_command(
-                    "textDocument/publishDiagnostics", params
-                )
-                self.send_notification(
-                    "textDocument/publishDiagnostics", diagnostic_params
-                )
-
-            except errors.InvalidResource:
-                # ignore document which not in project
-                pass
-            except errors.FeatureDisabled:
-                LOGGER.info("feature disabled")
-            except Exception as err:
-                LOGGER.error(err, exc_info=True)
+            # publish diagnostics
+            threading.Thread(target=self._publish_diagnostics, args=(params,)).start()
 
     def exec_response(self, message: RPCMessage):
         LOGGER.info(f"Exec Response: {message}")
+
+        message_id = message["id"]
         try:
+            method = self.request_map.pop(message_id)
+
             if error := message.get("error"):
-                LOGGER.info(error["message"])
+                if message_id in self.canceled_requests:
+                    self.canceled_requests.remove(message_id)
+                    return
+
+                print(error["message"])
                 return
 
-            method = self.request_map.pop(message["id"])
-
         except KeyError:
-            LOGGER.info(f"invalid response {message['id']}")
+            LOGGER.info(f"invalid response {message_id}")
         else:
             self.exec_command(method, message)
 
     def exec_message(self, message: RPCMessage):
         """exec received message"""
 
-        msg_id = message.get("id")
+        # message characteristic
+        # - notification  : method, params
+        # - request       : id, method, params
+        # - response*     : id, result | error
+        #
+        # * response only have single value of result or error
+
+        message_id = message.get("id")
         method = message.get("method")
 
         if method:
             params = message.get("params")
 
-            if msg_id is None:
+            if message_id is None:
                 self.exec_notification(method, params)
             else:
-                self.request_handler.add(msg_id, method, params)
+                self.request_handler.add(message_id, method, params)
 
-        elif msg_id is not None:
+        elif message_id is not None:
             self.exec_response(message)
         else:
             LOGGER.error(f"invalid message: {message}")

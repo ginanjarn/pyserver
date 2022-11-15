@@ -66,7 +66,6 @@ class TCPIO(AbstractTransport):
 
         self.listen_event = threading.Event()
         self.connect_event = threading.Event()
-        self._shutdown = False
 
         self.timeout = timeout
         if timeout is None or timeout < 0:
@@ -79,7 +78,7 @@ class TCPIO(AbstractTransport):
         LOGGER.info("poll")
         self.connect_event.wait()
 
-        if self._shutdown or self.conn is None:
+        if self.conn is None:
             self.terminate()
             return b""
 
@@ -87,14 +86,11 @@ class TCPIO(AbstractTransport):
             if chunk := self.conn.recv(self.BUFFER_LENGTH):
                 return chunk
 
-        except Exception as err:
-            self.terminate()
-
-            if not isinstance(err, ConnectionError):
-                raise err
-
+        except ConnectionError as err:
             LOGGER.debug(err)
-            return b""
+
+        self.terminate()
+        return b""
 
     def listen(self):
         LOGGER.info("listen")
@@ -142,7 +138,5 @@ class TCPIO(AbstractTransport):
         """terminate process"""
         LOGGER.info("terminate")
 
-        # '_shutdown' must be 'True' before connect_event.set()
-        self._shutdown = True
         self.connect_event.set()
         self.listen_event.set()

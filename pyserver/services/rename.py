@@ -41,9 +41,8 @@ class RenameService(Services):
         self.params = params
 
     def execute(self) -> Refactoring:
-        document = self.params.workspace.get_document(self.params.file_name)
         script = Script(
-            document.text,
+            self.params.text,
             path=self.params.file_name,
             project=self.params.jedi_project(),
         )
