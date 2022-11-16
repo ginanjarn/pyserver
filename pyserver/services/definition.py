@@ -35,16 +35,24 @@ class DefinitionService(Services):
         return script.goto(row, col, follow_imports=True)
 
     def build_items(self, names: List[Name]):
+
+        # jedi rows start with 1, columns start with 0
+        default = (1, 0)
+
         for name in names:
             try:
-                path = str(name.module_path)
-                start = name.get_definition_start_position() or (1, 0)
-                end = name.get_definition_end_position() or (1, 0)
+                path = name.module_path
+                start = name.get_definition_start_position() or default
+                end = name.get_definition_end_position() or default
             except Exception:
-                return
+                continue
+
+            # may be path unknown
+            if not path:
+                continue
 
             item = {
-                "uri": path_to_uri(path),
+                "uri": path_to_uri(str(path)),
                 "range": {
                     "start": {"line": start[0] - 1, "character": start[1]},
                     "end": {"line": end[0] - 1, "character": end[1]},
