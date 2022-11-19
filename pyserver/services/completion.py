@@ -98,7 +98,10 @@ class CompletionService(Services):
                 "sortText": text,
                 "filterText": text,
                 "insertTextFormat": 1,  # insert format = text
-                "textEdit": {"range": self.get_text_edit_range(), "newText": text,},
+                "textEdit": {
+                    "range": self.get_text_edit_range(),
+                    "newText": text,
+                },
             }
 
             if name_type in {"class", "function", "property"}:

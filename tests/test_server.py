@@ -110,7 +110,7 @@ class Stream:
 
     This class handle JSONRPC stream format
         '<header>\r\n<content>'
-    
+
     Header items must seperated by '\r\n'
     """
 
