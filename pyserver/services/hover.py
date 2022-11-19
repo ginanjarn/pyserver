@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from html import escape
 from io import StringIO
 from typing import List, Dict, Any
 
@@ -37,15 +38,19 @@ class HoverService(Services):
     def build_item(self, name: Name):
         buffer = StringIO()
 
-        content = name._get_docstring_signature() or name.name
-        buffer.write(f"```python\n{content}\n```\n")
-
         if mod := name.module_name:
             if mod != "__main__":
                 buffer.write(f"module: `{mod}`\n\n")
 
+        if name.type in {"class", "function"}:
+            buffer.write(f"### {name.name}\n\n")
+
+        if name.type != "module":
+            content = name._get_docstring_signature() or name.name
+            buffer.write(f"```python\n{content}\n```\n\n")
+
         if description := name._get_docstring():
-            buffer.write(f"```\n{description}\n```\n")
+            buffer.write(f"<pre>{escape(description, quote=False)}</pre>\n\n")
 
         return buffer.getvalue()
 
@@ -66,7 +71,10 @@ class HoverService(Services):
             column = self.params.character
 
         result = {
-            "contents": {"kind": "markdown", "value": self.build_item(name_object),},
+            "contents": {
+                "kind": "markdown",
+                "value": self.build_item(name_object),
+            },
             "range": {
                 "start": {"line": self.params.line, "character": column},
                 "end": {
