@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from difflib import unified_diff
 from typing import Dict, Any, List
 
 import black
@@ -85,10 +86,11 @@ class FormattingService(Services):
 
     def get_result(self) -> List[Dict[str, Any]]:
         formatted_str = self.execute()
-        diff_text = black.diff(
-            self.params.text,
-            formatted_str,
+        udiff = unified_diff(
+            self.params.text.split("\n"),
+            formatted_str.split("\n"),
             self.params.file_name,
             self.params.file_name,
         )
+        diff_text = "\n".join(udiff)
         return list(self.build_items(diff_text, self.params.text))
