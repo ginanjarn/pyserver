@@ -50,6 +50,7 @@ class Stream:
 
     _content_length_pattern = re.compile(r"^Content-Length: (\d+)", flags=re.MULTILINE)
 
+    @lru_cache(128)
     def _get_content_length(self, headers: bytes) -> int:
         """get Content-Length"""
 
@@ -233,9 +234,9 @@ class LSPServer(Commands):
         """listen remote"""
 
         self.request_handler.run()
+        threading.Thread(target=self.transport.listen, daemon=True).start()
 
-        threading.Thread(target=self._listen_message, daemon=True).start()
-        self.transport.listen()
+        self._listen_message()
 
     def shutdown(self):
         """shutdown server"""
@@ -254,23 +255,28 @@ class LSPServer(Commands):
                     LOGGER.error(err, exc_info=True)
 
         while True:
+            # exec all buffered message
+            exec_buffered_message()
+
             chunk = self.transport.poll()
+            stream.put(chunk)
             if not chunk:
                 return
 
-            stream.put(chunk)
-            exec_buffered_message()
-
     @staticmethod
     @lru_cache(maxsize=128)
-    def flatten_method(method: str):
-        """flatten method to lower case and replace character to valid identifier name"""
-        flat_method = method.lower().replace("/", "_").replace("$", "s")
+    def normalize_method(method: str) -> str:
+        """normalize method to identifier name
+        * replace "/" with "_"
+        * replace "$" with "s"
+        * convert to lower case
+        """
+        flat_method = method.replace("/", "_").replace("$", "s").lower()
         return f"handle_{flat_method}"
 
     def exec_command(self, method: str, params: RPCMessage):
         try:
-            func = getattr(self.handler, self.flatten_method(method))
+            func = getattr(self.handler, self.normalize_method(method))
         except AttributeError:
             raise errors.MethodNotFound(f"method not found {method!r}")
 
