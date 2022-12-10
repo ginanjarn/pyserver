@@ -12,7 +12,7 @@ from pyserver import errors
 from pyserver.errors import ParseError, ContentIncomplete
 from pyserver.handler import BaseHandler
 from pyserver.message import RPCMessage
-from pyserver.transport import AbstractTransport
+from pyserver.transport import Transport
 
 LOGGER = logging.getLogger(__name__)
 # LOGGER.setLevel(logging.DEBUG)  # module logging level
@@ -181,7 +181,7 @@ class RequestHandler:
 class Commands:
     """commands interface"""
 
-    def __init__(self, transport: AbstractTransport):
+    def __init__(self, transport: Transport):
         self.transport = transport
         self.request_id = 0
         self.request_map = {}
@@ -222,7 +222,7 @@ class Commands:
 class LSPServer(Commands):
     """LSP server"""
 
-    def __init__(self, transport: AbstractTransport, handler: BaseHandler, /):
+    def __init__(self, transport: Transport, handler: BaseHandler, /):
         super().__init__(transport)
 
         self.handler = handler

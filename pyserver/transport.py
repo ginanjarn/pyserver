@@ -14,8 +14,8 @@ STREAM_HANDLER.setFormatter(logging.Formatter(LOG_TEMPLATE))
 LOGGER.addHandler(STREAM_HANDLER)
 
 
-class AbstractTransport(ABC):
-    """AbstractTransport
+class Transport(ABC):
+    """Transport Abstraction
 
     Transport provide connection to remote.
     Fetch and send data handled by user class.
@@ -52,7 +52,7 @@ class AddressInUse(OSError):
     """socket address has used by other process"""
 
 
-class TCPIO(AbstractTransport):
+class TCPIO(Transport):
     """TCPIO Transport implementation"""
 
     BUFFER_LENGTH = 4096
