@@ -113,7 +113,10 @@ class CompletionService(Services):
             yield item
 
     def get_result(self) -> Dict[str, Any]:
-        candidates = self.execute()
+        try:
+            candidates = self.execute()
+        except Exception:
+            candidates = []
 
         # transform as rpc
         result = {
