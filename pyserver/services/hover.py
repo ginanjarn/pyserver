@@ -43,7 +43,7 @@ class HoverService(Services):
                 buffer.write(f"module: `{mod}`\n\n")
 
         if name.type in {"class", "function"}:
-            buffer.write(f"### {name.name}\n\n")
+            buffer.write(f"### {name.type} `{name.name}`\n\n")
 
         if name.type != "module":
             content = name._get_docstring_signature() or name.name
