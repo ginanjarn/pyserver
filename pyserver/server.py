@@ -277,8 +277,8 @@ class LSPServer(Commands):
     def exec_command(self, method: str, params: RPCMessage):
         try:
             func = getattr(self.handler, self.normalize_method(method))
-        except AttributeError:
-            raise errors.MethodNotFound(f"method not found {method!r}")
+        except AttributeError as err:
+            raise errors.MethodNotFound(f"method not found {method!r}") from err
 
         # exec function
         return func(params)

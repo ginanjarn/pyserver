@@ -193,6 +193,7 @@ class LSPHandler(BaseHandler):
 
     @session.ready
     def handle_textdocument_didclose(self, params: dict) -> None:
+        LOGGER.debug(f"didclose params: {params}")
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:

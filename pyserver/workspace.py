@@ -39,7 +39,7 @@ class Document:
                 end_line, end_character = end["line"], end["character"]
 
             except KeyError as err:
-                raise errors.InvalidParams(f"invalid params {err}")
+                raise errors.InvalidParams(f"invalid params {err}") from err
 
             new_lines = []
             # pre change line
