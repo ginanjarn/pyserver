@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Union
 
 from pyserver import errors
 from pyserver import message
@@ -12,22 +12,20 @@ from pyserver import message
 class Document:
     """Document object"""
 
-    file_name: str
+    path: Path
     language_id: str
     version: int
     text: str
 
     @classmethod
-    def from_file(cls, file_name: str):
-        with open(file_name) as file:
-            text = file.read()
-
-        return cls(file_name, "", 0, text)
+    def from_file(cls, file_path: Union[Path, str]):
+        text = Path(file_path).read_text()
+        return cls(file_path, "", 0, text)
 
     @property
     def document_uri(self) -> str:
         """document uri"""
-        return message.path_to_uri(self.file_name)
+        return message.path_to_uri(self.path)
 
     def did_change(self, content_changes: List[dict]):
         lines = self.text.split("\n")
@@ -62,27 +60,29 @@ class Document:
 class Workspace:
     """workspace handler"""
 
-    def __init__(self, root_path: str):
+    def __init__(self, root_path: Path):
         self.root_path = root_path
         self.documents: Dict[str, Document] = {}
 
-        if not Path(root_path).is_dir():
+        if not self.root_path.is_dir():
             raise errors.InternalError(f"{root_path!r} is not directory")
 
     def __repr__(self):
         return f"Workspace(root_path={self.root_path!r},documents={self.documents!r})"
 
-    def open_document(self, file_name: str, language_id: str, version: int, text: str):
-        self.documents[file_name] = Document(file_name, language_id, version, text)
+    def open_document(self, file_path: Path, language_id: str, version: int, text: str):
+        self.documents[file_path] = Document(
+            Path(file_path), language_id, version, text
+        )
 
-    def close_document(self, file_name: str):
+    def close_document(self, file_path: Path):
         try:
-            del self.documents[file_name]
+            del self.documents[file_path]
         except KeyError:
             pass
 
-    def get_document(self, file_name: str) -> Document:
+    def get_document(self, file_path: Path) -> Document:
         try:
-            return self.documents[file_name]
-        except KeyError:
-            raise errors.InvalidResource(f"{file_name!r} not opened")
+            return self.documents[file_path]
+        except KeyError as err:
+            raise errors.InvalidResource(f"{file_path!r} not opened") from err

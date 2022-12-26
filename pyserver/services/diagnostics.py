@@ -4,6 +4,7 @@ import re
 from collections import namedtuple
 from dataclasses import dataclass
 from io import StringIO
+from pathlib import Path
 from typing import Dict, Any
 
 from pyflakes import api as pyflakes_api
@@ -15,7 +16,7 @@ from pyserver.services import Services
 
 @dataclass
 class DiagnosticParams:
-    file_name: str
+    file_path: Path
     text: str
     version: int
 
@@ -37,7 +38,7 @@ class DiagnosticService(Services):
         error_stream = StringIO()
         reporter = Reporter(warning_stream, error_stream)
 
-        pyflakes_api.check(self.params.text, self.params.file_name, reporter)
+        pyflakes_api.check(self.params.text, str(self.params.file_path), reporter)
 
         return Report(warning_stream.getvalue(), error_stream.getvalue())
 
@@ -79,7 +80,7 @@ class DiagnosticService(Services):
     def get_result(self) -> Dict[str, Any]:
         report = self.execute()
         return {
-            "uri": path_to_uri(self.params.file_name),
+            "uri": path_to_uri(self.params.file_path),
             "version": self.params.version,
             "diagnostics": list(self.build_items(report)),
         }

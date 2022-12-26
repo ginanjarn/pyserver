@@ -2,6 +2,7 @@
 
 import json
 from functools import lru_cache
+from pathlib import Path
 from urllib.parse import urlparse, urlunparse, quote, unquote
 from urllib.request import pathname2url, url2pathname
 
@@ -63,22 +64,24 @@ class DocumentURI(str):
     """document uri"""
 
     @classmethod
-    def from_path(cls, file_name):
+    def from_path(cls, path: Path):
         """from file name"""
-        return cls(
-            urlunparse(("file", "", quote(pathname2url(str(file_name))), "", "", ""))
-        )
+        return cls(urlunparse(("file", "", quote(pathname2url(str(path))), "", "", "")))
 
-    def to_path(self) -> str:
+    def to_path(self) -> Path:
         """convert to path"""
-        return url2pathname(unquote(urlparse(self).path))
+        parsed = urlparse(self)
+        if parsed.scheme != "file":
+            raise ValueError("url scheme must be 'file'")
+
+        return Path(url2pathname(unquote(parsed.path)))
 
 
 @lru_cache(128)
-def path_to_uri(path: str):
+def path_to_uri(path: str) -> Path:
     return DocumentURI.from_path(path)
 
 
 @lru_cache(128)
-def uri_to_path(uri: str):
+def uri_to_path(uri: Path) -> DocumentURI:
     return DocumentURI(uri).to_path()

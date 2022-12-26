@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from jedi import Script, Project
@@ -12,8 +13,8 @@ from pyserver.services import Services
 
 @dataclass
 class PrepareRenameParams:
-    root_path: str
-    file_name: str
+    root_path: Path
+    file_path: Path
     text: str
     line: int
     character: int
@@ -44,7 +45,7 @@ class PrepareRenameService(Services):
         try:
             Script(
                 self.params.text,
-                path=self.params.file_name,
+                path=self.params.file_path,
                 project=Project(self.params.root_path),
             )
         except RefactoringError:

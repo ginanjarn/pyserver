@@ -3,6 +3,7 @@
 import re
 from dataclasses import dataclass
 from difflib import unified_diff
+from pathlib import Path
 from typing import Dict, Any, List
 
 import black
@@ -12,8 +13,8 @@ from pyserver.services import Services
 
 @dataclass
 class FormattingParams:
-    file_name: str
-    text: str
+    file_path: Path
+    text: Path
 
 
 class FormattingService(Services):
@@ -89,8 +90,8 @@ class FormattingService(Services):
         udiff = unified_diff(
             self.params.text.split("\n"),
             formatted_str.split("\n"),
-            self.params.file_name,
-            self.params.file_name,
+            str(self.params.file_path),
+            str(self.params.file_path),
         )
         diff_text = "\n".join(udiff)
         return list(self.build_items(diff_text, self.params.text))

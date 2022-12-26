@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from html import escape
 from io import StringIO
+from pathlib import Path
 from typing import List, Dict, Any
 
 from jedi import Script, Project
@@ -14,8 +15,8 @@ from pyserver.services import Services
 
 @dataclass
 class HoverParams:
-    root_path: str
-    file_name: str
+    root_path: Path
+    file_path: Path
     text: str
     line: int
     character: int
@@ -31,7 +32,7 @@ class HoverService(Services):
 
     def execute(self) -> List[Name]:
         project = Project(self.params.root_path)
-        script = Script(self.params.text, path=self.params.file_name, project=project)
+        script = Script(self.params.text, path=self.params.file_path, project=project)
         row, col = self.params.jedi_rowcol()
         return script.help(row, col)
 

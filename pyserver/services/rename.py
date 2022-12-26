@@ -3,6 +3,7 @@
 import re
 from dataclasses import dataclass
 from difflib import unified_diff
+from pathlib import Path
 from typing import Dict, Any
 
 from jedi import Script, Project
@@ -16,7 +17,7 @@ from pyserver.workspace import Workspace, Document
 @dataclass
 class RenameParams:
     workspace: Workspace
-    file_name: str
+    file_path: Path
     line: int
     character: int
     new_name: str
@@ -29,7 +30,7 @@ class RenameParams:
 
     @property
     def document(self):
-        return self.workspace.get_document(self.file_name)
+        return self.workspace.get_document(self.file_path)
 
     @property
     def text(self):
@@ -43,7 +44,7 @@ class RenameService(Services):
     def execute(self) -> Refactoring:
         script = Script(
             self.params.text,
-            path=self.params.file_name,
+            path=self.params.file_path,
             project=self.params.jedi_project(),
         )
         row, col = self.params.jedi_rowcol()
@@ -113,7 +114,7 @@ class RenameService(Services):
         for file_path, change in refactor.get_changed_files().items():
 
             origin_text = file_path.read_text()
-            if str(file_path) == self.params.file_name:
+            if file_path == self.params.file_path:
                 # use buffered text
                 origin_text = self.params.text
 
@@ -132,7 +133,7 @@ class RenameService(Services):
             diff_text = "\n".join(udiff)
 
             try:
-                document = self.params.workspace.get_document(str(file_path))
+                document = self.params.workspace.get_document(file_path)
             except errors.InvalidResource:
                 document = Document.from_file(file_path)
 

@@ -176,7 +176,7 @@ class LSPHandler(BaseHandler):
     def handle_textdocument_didopen(self, params: dict) -> None:
         LOGGER.debug(f"didopen params: {params}")
         try:
-            file_name = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = message.uri_to_path(params["textDocument"]["uri"])
             language_id = params["textDocument"]["languageId"]
             version = params["textDocument"]["version"]
             text = params["textDocument"]["text"]
@@ -185,7 +185,7 @@ class LSPHandler(BaseHandler):
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        self.workspace.open_document(file_name, language_id, version, text)
+        self.workspace.open_document(file_path, language_id, version, text)
 
     @session.ready
     def handle_textdocument_didsave(self, params: dict) -> None:
@@ -194,41 +194,41 @@ class LSPHandler(BaseHandler):
     @session.ready
     def handle_textdocument_didclose(self, params: dict) -> None:
         try:
-            file_name = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = message.uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        self.workspace.close_document(file_name)
+        self.workspace.close_document(file_path)
 
     @session.ready
     def handle_textdocument_didchange(self, params: dict) -> None:
         try:
-            file_name = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = message.uri_to_path(params["textDocument"]["uri"])
             content_changes = params["contentChanges"]
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        self.workspace.get_document(file_name).did_change(content_changes)
+        self.workspace.get_document(file_path).did_change(content_changes)
 
     @session.ready
     @check_capability
     def handle_textdocument_completion(self, params: dict) -> None:
         try:
-            file_name = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = message.uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        with VersionedDocument(self.workspace.get_document(file_name)) as document:
+        with VersionedDocument(self.workspace.get_document(file_path)) as document:
             root_path = self.workspace.root_path
             text = document.text
 
             params = completion.CompletionParams(
-                root_path, file_name, text, line, character
+                root_path, file_path, text, line, character
             )
             service = completion.CompletionService(params)
             return service.get_result()
@@ -237,18 +237,18 @@ class LSPHandler(BaseHandler):
     @check_capability
     def handle_textdocument_hover(self, params: dict) -> None:
         try:
-            file_name = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = message.uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        with VersionedDocument(self.workspace.get_document(file_name)) as document:
+        with VersionedDocument(self.workspace.get_document(file_path)) as document:
             root_path = self.workspace.root_path
             text = document.text
 
-            params = hover.HoverParams(root_path, file_name, text, line, character)
+            params = hover.HoverParams(root_path, file_path, text, line, character)
             service = hover.HoverService(params)
             return service.get_result()
 
@@ -256,15 +256,15 @@ class LSPHandler(BaseHandler):
     @check_capability
     def handle_textdocument_formatting(self, params: dict) -> None:
         try:
-            file_name = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = message.uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        with VersionedDocument(self.workspace.get_document(file_name)) as document:
+        with VersionedDocument(self.workspace.get_document(file_path)) as document:
             text = document.text
 
-            params = formatting.FormattingParams(file_name, text)
+            params = formatting.FormattingParams(file_path, text)
             service = formatting.FormattingService(params)
             return service.get_result()
 
@@ -272,19 +272,19 @@ class LSPHandler(BaseHandler):
     @check_capability
     def handle_textdocument_definition(self, params: dict) -> None:
         try:
-            file_name = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = message.uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        with VersionedDocument(self.workspace.get_document(file_name)) as document:
+        with VersionedDocument(self.workspace.get_document(file_path)) as document:
             root_path = self.workspace.root_path
             text = document.text
 
             params = definition.DefinitionParams(
-                root_path, file_name, text, line, character
+                root_path, file_path, text, line, character
             )
             service = definition.DefinitionService(params)
             return service.get_result()
@@ -293,16 +293,16 @@ class LSPHandler(BaseHandler):
     @check_capability
     def handle_textdocument_publishdiagnostics(self, params: dict):
         try:
-            file_name = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = message.uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        with VersionedDocument(self.workspace.get_document(file_name)) as document:
+        with VersionedDocument(self.workspace.get_document(file_path)) as document:
             text = document.text
             version = document.version
 
-            params = diagnostics.DiagnosticParams(file_name, text, version)
+            params = diagnostics.DiagnosticParams(file_path, text, version)
             service = diagnostics.DiagnosticService(params)
             return service.get_result()
 
@@ -310,18 +310,18 @@ class LSPHandler(BaseHandler):
     @check_capability
     def handle_textdocument_preparerename(self, params: dict) -> None:
         try:
-            file_name = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = message.uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        with VersionedDocument(self.workspace.get_document(file_name)) as document:
+        with VersionedDocument(self.workspace.get_document(file_path)) as document:
             text = document.text
 
             params = prepare_rename.PrepareRenameParams(
-                self.workspace.root_path, file_name, text, line, character
+                self.workspace.root_path, file_path, text, line, character
             )
             service = prepare_rename.PrepareRenameService(params)
             return service.get_result()
@@ -330,7 +330,7 @@ class LSPHandler(BaseHandler):
     @check_capability
     def handle_textdocument_rename(self, params: dict) -> None:
         try:
-            file_name = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = message.uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
             character = params["position"]["character"]
             new_name = params["newName"]
@@ -338,9 +338,9 @@ class LSPHandler(BaseHandler):
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        with VersionedDocument(self.workspace.get_document(file_name)) as document:
+        with VersionedDocument(self.workspace.get_document(file_path)) as document:
             params = rename.RenameParams(
-                self.workspace, document.file_name, line, character, new_name
+                self.workspace, document.path, line, character, new_name
             )
             service = rename.RenameService(params)
             return service.get_result()
