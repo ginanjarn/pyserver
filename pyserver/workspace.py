@@ -17,6 +17,8 @@ class Document:
     version: int
     text: str
 
+    __slots__ = ["path", "language_id", "version", "text"]
+
     @classmethod
     def from_file(cls, file_path: Union[Path, str]):
         text = Path(file_path).read_text()
@@ -59,6 +61,8 @@ class Document:
 
 class Workspace:
     """workspace handler"""
+
+    __slots__ = ["root_path", "documents"]
 
     def __init__(self, root_path: Path):
         self.root_path = root_path

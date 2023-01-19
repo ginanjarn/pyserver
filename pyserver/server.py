@@ -253,6 +253,9 @@ class LSPServer(Commands):
                     self.exec_message(message)
                 except Exception as err:
                     LOGGER.error(err, exc_info=True)
+                    self.send_notification(
+                        "window/logMessage", {"type": 1, "message": repr(err)}
+                    )
 
         while True:
             # exec all buffered message

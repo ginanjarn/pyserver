@@ -108,7 +108,8 @@ class CompletionService(Services):
             if name_type in {"class", "function", "property"}:
                 try:
                     if signature := completion._get_docstring_signature():
-                        item["detail"] = signature
+                        # a function may contain multiple signature
+                        item["detail"] = max(signature.split("\n"))
                 except Exception:
                     pass
             yield item
