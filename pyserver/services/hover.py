@@ -39,9 +39,8 @@ class HoverService(Services):
     def build_item(self, name: Name):
         buffer = StringIO()
 
-        if mod := name.module_name:
-            if mod != "__main__":
-                buffer.write(f"module: `{mod}`\n\n")
+        if (mod := name.module_name) != "__main__":
+            buffer.write(f"module: `{mod}`\n\n")
 
         if name.type in {"class", "function"}:
             buffer.write(f"### {name.type} `{name.name}`\n\n")
