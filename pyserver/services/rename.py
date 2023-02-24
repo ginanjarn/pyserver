@@ -40,16 +40,16 @@ class RenameParams:
 class RenameService(Services):
     def __init__(self, params: RenameParams):
         self.params = params
-
-    def execute(self) -> Refactoring:
-        script = Script(
+        self.script = Script(
             self.params.text,
             path=self.params.file_path,
             project=self.params.jedi_project(),
         )
+
+    def execute(self) -> Refactoring:
         row, col = self.params.jedi_rowcol()
         try:
-            return script.rename(row, col, new_name=self.params.new_name)
+            return self.script.rename(row, col, new_name=self.params.new_name)
         except RefactoringError as err:
             raise errors.InvalidRequest(repr(err)) from err
 

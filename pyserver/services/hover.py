@@ -1,6 +1,5 @@
 """hover service"""
 
-import re
 from dataclasses import dataclass
 from html import escape
 from io import StringIO
@@ -29,12 +28,22 @@ class HoverParams:
 class HoverService(Services):
     def __init__(self, params: HoverParams):
         self.params = params
+        self.script = Script(
+            self.params.text,
+            path=self.params.file_path,
+            project=Project(self.params.root_path),
+        )
+        self.identifier_leaf = self.script._module_node.get_leaf_for_position(
+            self.params.jedi_rowcol()
+        )
 
     def execute(self) -> List[Name]:
-        project = Project(self.params.root_path)
-        script = Script(self.params.text, path=self.params.file_path, project=project)
+        # only show documentation for keyword and identifier
+        if self.identifier_leaf.type not in {"keyword", "name"}:
+            return []
+
         row, col = self.params.jedi_rowcol()
-        return script.help(row, col)
+        return self.script.help(row, col)
 
     def build_item(self, name: Name):
         buffer = StringIO()
@@ -54,8 +63,6 @@ class HoverService(Services):
 
         return buffer.getvalue()
 
-    name_regex = re.compile(r"\w+$")
-
     def get_result(self) -> Dict[str, Any]:
         candidates = self.execute()
 
@@ -64,11 +71,9 @@ class HoverService(Services):
 
         # transform as rpc
         name_object = candidates[0]
-        line_occurence = self.params.text.splitlines()[self.params.line]
-        if found := self.name_regex.search(line_occurence[: self.params.character]):
-            column = found.start()
-        else:
-            column = self.params.character
+
+        start = self.identifier_leaf.start_pos
+        end = self.identifier_leaf.end_pos
 
         result = {
             "contents": {
@@ -76,10 +81,10 @@ class HoverService(Services):
                 "value": self.build_item(name_object),
             },
             "range": {
-                "start": {"line": self.params.line, "character": column},
+                "start": {"line": start[0] - 1, "character": start[1]},
                 "end": {
-                    "line": self.params.line,
-                    "character": column + len(name_object.name),
+                    "line": end[0] - 1,
+                    "character": end[1],
                 },
             },
         }

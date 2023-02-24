@@ -27,13 +27,22 @@ class DefinitionParams:
 class DefinitionService(Services):
     def __init__(self, params: DefinitionParams):
         self.params = params
-        self._text_edit_range = None
+        self.script = Script(
+            self.params.text,
+            path=self.params.file_path,
+            project=Project(self.params.root_path),
+        )
+        self.identifier_leaf = self.script._module_node.get_leaf_for_position(
+            self.params.jedi_rowcol()
+        )
 
     def execute(self) -> List[dict]:
-        project = Project(self.params.root_path)
-        script = Script(self.params.text, path=self.params.file_path, project=project)
+        # only show definition for identifier
+        if (not self.identifier_leaf) or self.identifier_leaf.type != "name":
+            return []
+
         row, col = self.params.jedi_rowcol()
-        return script.goto(row, col, follow_imports=True)
+        return self.script.goto(row, col, follow_imports=True)
 
     def build_items(self, names: List[Name]):
 

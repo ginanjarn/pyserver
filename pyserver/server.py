@@ -4,12 +4,13 @@ import logging
 import queue
 import re
 import threading
+import sys
 from collections import namedtuple
 from functools import lru_cache
 from typing import Optional, Any, Callable, Iterator
 
 from pyserver import errors
-from pyserver.errors import ParseError, ContentIncomplete
+from pyserver.errors import ContentIncomplete
 from pyserver.handler import BaseHandler
 from pyserver.message import RPCMessage
 from pyserver.transport import Transport
@@ -32,71 +33,52 @@ class Stream:
     """
 
     HEADER_ENCODING = "ascii"
-    HEADER_SEPARATOR = b"\r\n\r\n"
+    SEPARATOR = b"\r\n\r\n"
 
     def __init__(self, content: bytes = b""):
         self.buffer = [content] if content else []
         self._lock = threading.RLock()
-
-    def clear(self):
-        """clear buffer"""
-        with self._lock:
-            self.buffer = []
 
     def put(self, data: bytes) -> None:
         """put stream data"""
         with self._lock:
             self.buffer.append(data)
 
-    _content_length_pattern = re.compile(r"^Content-Length: (\d+)", flags=re.MULTILINE)
-
+    @staticmethod
     @lru_cache(128)
-    def _get_content_length(self, headers: bytes) -> int:
-        """get Content-Length"""
-
-        if found := self._content_length_pattern.search(
-            headers.decode(self.HEADER_ENCODING)
-        ):
+    def _get_content_length(headers: bytes) -> int:
+        pattern = re.compile(rb"^Content-Length: (\d+)", flags=re.MULTILINE)
+        if found := pattern.search(headers):
             return int(found.group(1))
-        raise ValueError("unable find 'Content-Length'")
+        raise ValueError("unable get 'Content-Length'")
 
     def get_contents(self) -> Iterator[bytes]:
-        """get contents
-
-        Yield
-        ------
-        content: bytes
-
-        Raises:
-        -------
-        ParseError
-        EOFError
-        ContentIncomplete
-        """
+        """get contents"""
 
         def get_content():
-            str_buffer = b"".join(self.buffer)
+            text_buffer = b"".join(self.buffer)
 
-            if not str_buffer:
+            if not text_buffer:
                 raise EOFError("buffer empty")
 
+            # read header
             try:
-                header_end = str_buffer.index(self.HEADER_SEPARATOR)
-                content_length = self._get_content_length(str_buffer[:header_end])
-
+                header_end = text_buffer.index(self.SEPARATOR)
             except ValueError as err:
-                raise ParseError(f"header error: {err!r}") from err
+                raise ValueError("unable get message header") from err
 
-            start_index = header_end + len(self.HEADER_SEPARATOR)
-            end_index = start_index + content_length
-            content = str_buffer[start_index:end_index]
-            recv_len = len(content)
+            content_length = self._get_content_length(text_buffer[:header_end])
 
-            if recv_len < content_length:
+            # read content
+            start = header_end + len(self.SEPARATOR)
+            end = start + content_length
+            content = text_buffer[start:end]
+
+            if (recv_len := len(content)) and recv_len < content_length:
                 raise ContentIncomplete(f"want: {content_length}, expected: {recv_len}")
 
-            # replace buffer
-            self.buffer = [str_buffer[end_index:]]
+            # restore unread buffer
+            self.buffer = [text_buffer[end:]]
             return content
 
         while True:
@@ -105,18 +87,18 @@ class Stream:
                     content = get_content()
                 except (EOFError, ContentIncomplete):
                     break
+
                 except Exception as err:
-                    LOGGER.error(err)
-                    # clean up buffer
-                    self.clear()
-                    break
+                    LOGGER.critical(err, exc_info=True)
+                    sys.exit(1)
+
                 else:
                     yield content
 
     @staticmethod
     def wrap_content(content: bytes):
         header = f"Content-Length: {len(content)}".encode(Stream.HEADER_ENCODING)
-        return b"".join([header, Stream.HEADER_SEPARATOR, content])
+        return b"".join([header, Stream.SEPARATOR, content])
 
 
 RequestData = namedtuple("RequestData", ["id_", "method", "params"])
@@ -163,8 +145,8 @@ class RequestHandler:
         except errors.FeatureDisabled as err:
             error = err
         except Exception as err:
-            LOGGER.error(err, exc_info=True)
-            error = err
+            LOGGER.debug(err, exc_info=True)
+            error = errors.InternalError(err)
 
         self.respond_callback(request.id_, result, errors.transform_error(error))
 
@@ -226,7 +208,7 @@ class LSPServer(Commands):
         super().__init__(transport)
 
         self.handler = handler
-        self.request_handler = RequestHandler(self.exec_command, self.send_response)
+        self.request_handler = RequestHandler(self.handler.handle, self.send_response)
 
         self._diagnostics_lock = threading.Lock()
 
@@ -247,8 +229,14 @@ class LSPServer(Commands):
 
         def exec_buffered_message():
             for content in stream.get_contents():
-                message = RPCMessage.from_bytes(content)
-                LOGGER.debug(f"Received << {message}")
+                try:
+                    message = RPCMessage.from_bytes(content)
+                    LOGGER.debug(f"Received << {message}")
+
+                except Exception as err:
+                    LOGGER.critical(err, exc_info=True)
+                    sys.exit(1)
+
                 try:
                     self.exec_message(message)
                 except Exception as err:
@@ -266,33 +254,13 @@ class LSPServer(Commands):
             if not chunk:
                 return
 
-    @staticmethod
-    @lru_cache(maxsize=128)
-    def normalize_method(method: str) -> str:
-        """normalize method to identifier name
-        * replace "/" with "_"
-        * replace "$" with "s"
-        * convert to lower case
-        """
-        flat_method = method.replace("/", "_").replace("$", "s").lower()
-        return f"handle_{flat_method}"
-
-    def exec_command(self, method: str, params: RPCMessage):
-        try:
-            func = getattr(self.handler, self.normalize_method(method))
-        except AttributeError as err:
-            raise errors.MethodNotFound(f"method not found {method!r}") from err
-
-        # exec function
-        return func(params)
-
     def _publish_diagnostics(self, params: dict):
         if self._diagnostics_lock.locked():
             return
 
         with self._diagnostics_lock:
             try:
-                diagnostics_params = self.exec_command(
+                diagnostics_params = self.handler.handle(
                     "textDocument/publishDiagnostics", params
                 )
                 self.send_notification(
@@ -319,7 +287,7 @@ class LSPServer(Commands):
             return
 
         try:
-            self.exec_command(method, params)
+            self.handler.handle(method, params)
         except Exception as err:
             LOGGER.error(err, exc_info=True)
 
@@ -348,7 +316,7 @@ class LSPServer(Commands):
         except KeyError:
             LOGGER.info(f"invalid response {message_id}")
         else:
-            self.exec_command(method, message)
+            self.handler.handle(method, message)
 
     def exec_message(self, message: RPCMessage):
         """exec received message"""

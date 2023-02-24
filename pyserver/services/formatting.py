@@ -87,6 +87,9 @@ class FormattingService(Services):
 
     def get_result(self) -> List[Dict[str, Any]]:
         formatted_str = self.execute()
+        if formatted_str == self.params.text:
+            return []
+
         udiff = unified_diff(
             self.params.text.split("\n"),
             formatted_str.split("\n"),

@@ -1,6 +1,5 @@
 """completion service"""
 
-import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,13 +27,17 @@ class CompletionParams:
 class CompletionService(Services):
     def __init__(self, params: CompletionParams):
         self.params = params
-        self._text_edit_range = None
+        self.script = Script(
+            self.params.text,
+            path=self.params.file_path,
+            project=Project(self.params.root_path),
+        )
+
+        self.text_edit_range = self._get_replaced_text_range()
 
     def execute(self) -> List[Completion]:
-        project = Project(self.params.root_path)
-        script = Script(self.params.text, path=self.params.file_path, project=project)
         row, col = self.params.jedi_rowcol()
-        return script.complete(row, col)
+        return self.script.complete(row, col)
 
     kind_map = defaultdict(
         lambda: 1,  # default 'text'
@@ -51,68 +54,61 @@ class CompletionService(Services):
         },
     )
 
-    # indentifier started by alphabet or understrip followed by alphanumeric
-    identifier_pattern = re.compile(r"[_a-zA-Z]\w*")
-
-    def get_text_edit_range(self):
-        if self._text_edit_range:
-            return self._text_edit_range
+    def _get_replaced_text_range(self) -> dict:
+        """get replaced text range"""
 
         linepos = self.params.line
-        lines = self.params.text.split("\n")
-        trigger_line = lines[linepos]
+        start_char = end_char = self.params.character
 
-        trigger_character = self.params.character
-        start_char = end_char = trigger_character
+        leaf = self.script._module_node.get_leaf_for_position(self.params.jedi_rowcol())
 
-        # text range wraps word where trigger located
-        for found in self.identifier_pattern.finditer(trigger_line):
-            start, end = found.start(), found.end()
-            if start <= self.params.character <= end:
-                start_char = start
-                end_char = end
-                break
+        # only replace identifier at trigger location
+        if leaf and leaf.type == "name":
+            start_char = leaf.start_pos[1]
+            end_char = leaf.end_pos[1]
 
-        # else:
-        # change only happen at trigger location
-
-        self._text_edit_range = {
+        return {
             "start": {"line": linepos, "character": start_char},
             "end": {"line": linepos, "character": end_char},
         }
-        return self._text_edit_range
 
-    def build_items(self, completions: List[Completion]):
-        for completion in completions:
-
+    def build_items(self, completions: List[Completion]) -> List[dict]:
+        def build_item(completion: Completion):
             text = completion.name
+            signature = None
+
             try:
-                name_type = completion.type
+                type_name = completion.type
+
+                # only show signature for class and function
+                if type_name in {"class", "function"}:
+                    if signatures := completion._get_signatures(for_docstring=True):
+                        # get first signature
+                        signature = signatures[0].to_string()
+
             except Exception:
-                name_type = None
+                type_name = None
 
             item = {
                 "label": text,
                 "labelDetails": {},
-                "kind": self.kind_map[name_type],
+                "kind": self.kind_map[type_name],
                 "preselect": False,
                 "sortText": text,
                 "filterText": text,
                 "insertTextFormat": 1,  # insert format = text
                 "textEdit": {
-                    "range": self.get_text_edit_range(),
+                    "range": self.text_edit_range,
                     "newText": text,
                 },
             }
 
-            if name_type in {"class", "function", "property"}:
-                try:
-                    if signature := completion._get_docstring_signature():
-                        # a function may contain multiple signature
-                        item["detail"] = max(signature.split("\n"))
-                except Exception:
-                    pass
-            yield item
+            if signature:
+                item["detail"] = signature
+
+            return item
+
+        return [build_item(completion) for completion in completions]
 
     def get_result(self) -> Dict[str, Any]:
         try:
@@ -129,6 +125,6 @@ class CompletionService(Services):
                     "end": {"line": 0, "character": 0},
                 }
             },
-            "items": list(self.build_items(candidates)),
+            "items": self.build_items(candidates),
         }
         return result

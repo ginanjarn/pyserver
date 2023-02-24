@@ -1,13 +1,10 @@
 """prepare rename service"""
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 from jedi import Script, Project
-from jedi.api.refactoring import RefactoringError
-
 from pyserver.services import Services
 
 
@@ -19,11 +16,11 @@ class PrepareRenameParams:
     line: int
     character: int
 
-    def lines(self) -> List[str]:
-        return self.text.split("\n")
-
     def jedi_rowcol(self):
         return (self.line + 1, self.character)
+
+    def jedi_project(self) -> Project:
+        return Project(self.root_path)
 
 
 @dataclass
@@ -38,31 +35,39 @@ class Identifier:
 class PrepareRenameService(Services):
     def __init__(self, params: PrepareRenameParams):
         self.params = params
-
-    ident_pattern = re.compile(r"([a-zA-Z_][\w+]*)")
+        self.script = Script(
+            self.params.text,
+            path=self.params.file_path,
+            project=self.params.jedi_project(),
+        )
 
     def execute(self) -> Optional[Identifier]:
-        try:
-            Script(
-                self.params.text,
-                path=self.params.file_path,
-                project=Project(self.params.root_path),
-            )
-        except RefactoringError:
+
+        # get leaf position
+        leaf = self.script._module_node.get_leaf_for_position(self.params.jedi_rowcol())
+
+        # only rename identifier
+        if (not leaf) or (leaf.type != "name"):
             return None
 
-        lines = self.params.lines()
-        line_occurence = lines[self.params.line]
-        for found in self.ident_pattern.finditer(line_occurence):
-            start_line = end_line = self.params.line
-            start_char = found.start()
-            end_char = found.end()
-            if start_char <= self.params.character <= end_char:
-                return Identifier(
-                    start_line, start_char, end_line, end_char, found.group(1)
-                )
+        # check object reference
+        names = self.script.goto(*self.params.jedi_rowcol(), follow_imports=True)
+        for name in names:
+            if name.in_builtin_module():
+                raise ValueError("unable rename 'builtin'")
 
-        return None
+            if (path := name.module_path) and str(path).startswith(
+                str(self.params.root_path)
+            ):
+                # only rename object inside of project
+                continue
+
+            else:
+                raise ValueError("unable rename object referenced to external project")
+
+        start_line, start_col = leaf.start_pos
+        end_line, end_col = leaf.end_pos
+        return Identifier(start_line - 1, start_col, end_line - 1, end_col, leaf.value)
 
     def get_result(self) -> Optional[Dict[str, Any]]:
         candidate = self.execute()

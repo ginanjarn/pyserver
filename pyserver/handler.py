@@ -4,7 +4,7 @@ import logging
 import sys
 from collections import defaultdict
 from contextlib import contextmanager
-from functools import wraps
+from functools import wraps, lru_cache
 from io import StringIO
 
 from pyserver import errors
@@ -99,16 +99,26 @@ if IMPORT_ERROR_MESSAGE.getvalue():
 
 
 class BaseHandler:
-    """base handler define rpc flattened command handler
+    """base handler"""
 
-    every command have to implement single params argument
-    with 'handle_*' prefex
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def normalize_method(method: str) -> str:
+        """normalize method to identifier name
+        * replace "/" with "_"
+        * replace "$" with "s"
+        * convert to lower case
+        """
+        return method.replace("/", "_").replace("$", "s").lower()
 
-    >>> class DummyHandler(BaseHandler):
-    ...     def handle_initialize(self, params) -> None:
-    ...         pass
-    ...
-    """
+    def handle(self, method: str, params: message.RPCMessage):
+        try:
+            func = getattr(self, self.normalize_method(method))
+        except AttributeError as err:
+            raise errors.MethodNotFound(f"method not found {method!r}") from err
+
+        # exec function
+        return func(params)
 
 
 class SessionManager:
@@ -130,6 +140,8 @@ class SessionManager:
         self._request_shutdown = True
 
     def ready(self, func):
+        """check if session is ready"""
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             if not self.initialized:
@@ -145,26 +157,29 @@ class SessionManager:
 
 @contextmanager
 def VersionedDocument(document: Document):
-    """VersionedDocument ensure document not modified after execution"""
+    """VersionedDocument check version changes pre and post execution.
 
+    Raises ContentModified if version is changed.
+    """
     try:
         pre_version = document.version
         yield document
 
     finally:
+        post_version = document.version
         # check version changes
-        if pre_version != document.version:
-            raise errors.ContentModified
+        if pre_version != post_version:
+            raise errors.ContentModified(f"{pre_version} != {post_version}")
 
 
 def check_capability(capability: str):
-    """check feature capability wrapper"""
+    """check feature capability"""
 
     def inner(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             if not FEATURE_CAPABILITY[capability]:
-                raise errors.FeatureDisabled(f"feature disabled {capability!r}")
+                raise errors.FeatureDisabled(f"feature {capability!r} is disabled")
 
             return func(*args, **kwargs)
 
@@ -182,7 +197,7 @@ class LSPHandler(BaseHandler):
     def __init__(self):
         self.workspace = None
 
-    def handle_initialized(self, params: dict) -> None:
+    def initialized(self, params: dict) -> None:
         if not self.workspace:
             raise errors.InternalError("workspace not defined")
 
@@ -190,11 +205,11 @@ class LSPHandler(BaseHandler):
         return None
 
     @session.ready
-    def handle_shutdown(self, params: dict) -> None:
+    def shutdown(self, params: dict) -> None:
         self.session.shutdown()
         return None
 
-    def handle_initialize(self, params: dict) -> dict:
+    def initialize(self, params: dict) -> dict:
         if self.session.initialized:
             raise errors.ServerNotInitialized
 
@@ -214,7 +229,7 @@ class LSPHandler(BaseHandler):
         return {}
 
     @session.ready
-    def handle_textdocument_didopen(self, params: dict) -> None:
+    def textdocument_didopen(self, params: dict) -> None:
         LOGGER.debug(f"didopen params: {params}")
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
@@ -229,11 +244,11 @@ class LSPHandler(BaseHandler):
         self.workspace.open_document(file_path, language_id, version, text)
 
     @session.ready
-    def handle_textdocument_didsave(self, params: dict) -> None:
+    def textdocument_didsave(self, params: dict) -> None:
         LOGGER.debug(f"didsave params: {params}")
 
     @session.ready
-    def handle_textdocument_didclose(self, params: dict) -> None:
+    def textdocument_didclose(self, params: dict) -> None:
         LOGGER.debug(f"didclose params: {params}")
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
@@ -244,7 +259,7 @@ class LSPHandler(BaseHandler):
         self.workspace.close_document(file_path)
 
     @session.ready
-    def handle_textdocument_didchange(self, params: dict) -> None:
+    def textdocument_didchange(self, params: dict) -> None:
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
             content_changes = params["contentChanges"]
@@ -256,7 +271,7 @@ class LSPHandler(BaseHandler):
 
     @session.ready
     @check_capability(FEATURE_TEXT_DOCUMENT_COMPLETION)
-    def handle_textdocument_completion(self, params: dict) -> None:
+    def textdocument_completion(self, params: dict) -> None:
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
@@ -277,7 +292,7 @@ class LSPHandler(BaseHandler):
 
     @session.ready
     @check_capability(FEATURE_TEXT_DOCUMENT_HOVER)
-    def handle_textdocument_hover(self, params: dict) -> None:
+    def textdocument_hover(self, params: dict) -> None:
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
@@ -296,7 +311,7 @@ class LSPHandler(BaseHandler):
 
     @session.ready
     @check_capability(FEATURE_TEXT_DOCUMENT_FORMATTING)
-    def handle_textdocument_formatting(self, params: dict) -> None:
+    def textdocument_formatting(self, params: dict) -> None:
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
@@ -312,7 +327,7 @@ class LSPHandler(BaseHandler):
 
     @session.ready
     @check_capability(FEATURE_TEXT_DOCUMENT_DEFINITION)
-    def handle_textdocument_definition(self, params: dict) -> None:
+    def textdocument_definition(self, params: dict) -> None:
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
@@ -333,7 +348,7 @@ class LSPHandler(BaseHandler):
 
     @session.ready
     @check_capability(FEATURE_TEXT_DOCUMENT_DIAGNOSTICS)
-    def handle_textdocument_publishdiagnostics(self, params: dict):
+    def textdocument_publishdiagnostics(self, params: dict):
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
@@ -350,7 +365,7 @@ class LSPHandler(BaseHandler):
 
     @session.ready
     @check_capability(FEATURE_TEXT_DOCUMENT_RENAME)
-    def handle_textdocument_preparerename(self, params: dict) -> None:
+    def textdocument_preparerename(self, params: dict) -> None:
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
@@ -370,7 +385,7 @@ class LSPHandler(BaseHandler):
 
     @session.ready
     @check_capability(FEATURE_TEXT_DOCUMENT_RENAME)
-    def handle_textdocument_rename(self, params: dict) -> None:
+    def textdocument_rename(self, params: dict) -> None:
         try:
             file_path = message.uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
