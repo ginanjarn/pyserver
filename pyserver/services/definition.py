@@ -8,7 +8,6 @@ from jedi import Script, Project
 from jedi.api.classes import Name
 
 from pyserver.message import path_to_uri
-from pyserver.services import Services
 
 
 @dataclass
@@ -24,7 +23,7 @@ class DefinitionParams:
         return self.line + 1, self.character
 
 
-class DefinitionService(Services):
+class DefinitionService:
     def __init__(self, params: DefinitionParams):
         self.params = params
         self.script = Script(

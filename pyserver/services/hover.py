@@ -9,8 +9,6 @@ from typing import List, Dict, Any
 from jedi import Script, Project
 from jedi.api.classes import Name
 
-from pyserver.services import Services
-
 
 @dataclass
 class HoverParams:
@@ -25,7 +23,7 @@ class HoverParams:
         return self.line + 1, self.character
 
 
-class HoverService(Services):
+class HoverService:
     def __init__(self, params: HoverParams):
         self.params = params
         self.script = Script(

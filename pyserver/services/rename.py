@@ -10,7 +10,6 @@ from jedi import Script, Project
 from jedi.api.refactoring import Refactoring, RefactoringError
 
 from pyserver import errors
-from pyserver.services import Services
 from pyserver.workspace import Workspace, Document
 
 
@@ -37,7 +36,7 @@ class RenameParams:
         return self.document.text
 
 
-class RenameService(Services):
+class RenameService:
     def __init__(self, params: RenameParams):
         self.params = params
         self.script = Script(

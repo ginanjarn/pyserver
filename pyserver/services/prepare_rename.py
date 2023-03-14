@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from jedi import Script, Project
-from pyserver.services import Services
 
 
 @dataclass
@@ -32,7 +31,7 @@ class Identifier:
     text: str
 
 
-class PrepareRenameService(Services):
+class PrepareRenameService:
     def __init__(self, params: PrepareRenameParams):
         self.params = params
         self.script = Script(

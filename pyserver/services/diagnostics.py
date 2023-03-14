@@ -10,7 +10,6 @@ from pyflakes import api as pyflakes_api
 from pyflakes.reporter import Reporter
 
 from pyserver.message import path_to_uri
-from pyserver.services import Services
 
 
 @dataclass
@@ -65,7 +64,7 @@ class Report:
             yield from self._parse_report(KIND_WARNING)
 
 
-class DiagnosticService(Services):
+class DiagnosticService:
     def __init__(self, params: DiagnosticParams):
         self.params = params
 

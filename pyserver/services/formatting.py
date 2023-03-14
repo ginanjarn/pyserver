@@ -8,8 +8,6 @@ from typing import Dict, Any, List
 
 import black
 
-from pyserver.services import Services
-
 
 @dataclass
 class FormattingParams:
@@ -17,7 +15,7 @@ class FormattingParams:
     text: Path
 
 
-class FormattingService(Services):
+class FormattingService:
     def __init__(self, params: FormattingParams):
         self.params = params
 

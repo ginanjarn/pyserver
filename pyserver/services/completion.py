@@ -8,8 +8,6 @@ from typing import List, Dict, Any
 from jedi import Script, Project
 from jedi.api.classes import Completion
 
-from pyserver.services import Services
-
 
 @dataclass
 class CompletionParams:
@@ -24,7 +22,7 @@ class CompletionParams:
         return self.line + 1, self.character
 
 
-class CompletionService(Services):
+class CompletionService:
     def __init__(self, params: CompletionParams):
         self.params = params
         self.script = Script(

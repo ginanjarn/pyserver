@@ -4,7 +4,7 @@ import logging
 import socket
 import sys
 import threading
-from abc import ABC, abstractmethod
+from typing import Protocol, runtime_checkable
 
 LOGGER = logging.getLogger(__name__)
 # LOGGER.setLevel(logging.DEBUG)  # module logging level
@@ -14,8 +14,9 @@ STREAM_HANDLER.setFormatter(logging.Formatter(LOG_TEMPLATE))
 LOGGER.addHandler(STREAM_HANDLER)
 
 
-class Transport(ABC):
-    """Transport Abstraction
+@runtime_checkable
+class Transport(Protocol):
+    """Transport Protocoll
 
     Transport provide connection to remote.
     Fetch and send data handled by user class.
@@ -28,22 +29,18 @@ class Transport(ABC):
 
     """
 
-    @abstractmethod
     def poll(self) -> bytes:
         """poll message
 
         poll() must run in separated thread to listen() or will deadlock
         """
 
-    @abstractmethod
     def send(self, data: bytes):
         """send message"""
 
-    @abstractmethod
     def listen(self):
         """listen connection"""
 
-    @abstractmethod
     def terminate(self):
         """terminate connection"""
 
@@ -52,7 +49,7 @@ class AddressInUse(OSError):
     """socket address has used by other process"""
 
 
-class TCPIO(Transport):
+class TCPIO:
     """TCPIO Transport implementation"""
 
     BUFFER_LENGTH = 4096
