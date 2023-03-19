@@ -31,9 +31,25 @@ class CompletionService:
             project=Project(self.params.root_path),
         )
 
+        self.leaf = self.script._module_node.get_leaf_for_position(
+            self.params.jedi_rowcol()
+        )
         self.text_edit_range = self._get_replaced_text_range()
 
     def execute(self) -> List[Completion]:
+
+        if leaf := self.leaf:
+            if leaf.type in {
+                "newline",
+                "string",
+                "fstring_string",
+                "number",
+            }:
+                return []
+
+            if leaf.type == "operator" and leaf.value in ":)]}":
+                return []
+
         row, col = self.params.jedi_rowcol()
         return self.script.complete(row, col)
 
@@ -58,10 +74,7 @@ class CompletionService:
         linepos = self.params.line
         start_char = end_char = self.params.character
 
-        leaf = self.script._module_node.get_leaf_for_position(self.params.jedi_rowcol())
-
-        # only replace identifier at trigger location
-        if leaf and leaf.type == "name":
+        if (leaf := self.leaf) and leaf.type == "name":
             start_char = leaf.start_pos[1]
             end_char = leaf.end_pos[1]
 
