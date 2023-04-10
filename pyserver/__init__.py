@@ -1,6 +1,7 @@
 """Python language sever implementation"""
 
 import sys
+import argparse
 
 ver = sys.version_info
 if ver < (3, 8):
@@ -13,8 +14,17 @@ from pyserver import transport
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--stdin", action="store_true")
+
+    arguments = parser.parse_args()
+
+    if arguments.stdin:
+        transport_ = transport.StandardIO()
+    else:
+        transport_ = transport.TCPIO()
+
     handler_ = handler.LSPHandler()
-    transport_ = transport.TCPIO()
     srv = server.LSPServer(transport_, handler_)
     srv.listen()
 

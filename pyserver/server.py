@@ -23,6 +23,10 @@ STREAM_HANDLER.setFormatter(logging.Formatter(LOG_TEMPLATE))
 LOGGER.addHandler(STREAM_HANDLER)
 
 
+class MissingHeader(Exception):
+    """missing header"""
+
+
 class Stream:
     r"""stream object
 
@@ -65,7 +69,7 @@ class Stream:
             try:
                 header_end = text_buffer.index(self.SEPARATOR)
             except ValueError as err:
-                raise ValueError("unable get message header") from err
+                raise MissingHeader("unable get message header") from err
 
             content_length = self._get_content_length(text_buffer[:header_end])
 
@@ -74,7 +78,8 @@ class Stream:
             end = start + content_length
             content = text_buffer[start:end]
 
-            if (recv_len := len(content)) and recv_len < content_length:
+            recv_len = len(content)
+            if recv_len < content_length:
                 raise ContentIncomplete(f"want: {content_length}, expected: {recv_len}")
 
             # restore unread buffer
@@ -86,6 +91,12 @@ class Stream:
                 try:
                     content = get_content()
                 except (EOFError, ContentIncomplete):
+                    break
+
+                # fetch next line if missing header
+                # this used to parse from standard io which enforce readline()
+                except MissingHeader as err:
+                    LOGGER.debug(err)
                     break
 
                 except Exception as err:

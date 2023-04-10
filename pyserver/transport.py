@@ -137,3 +137,35 @@ class TCPIO:
 
         self.connect_event.set()
         self.listen_event.set()
+
+
+class StandardIO:
+    """StandardIO Transport implementation"""
+
+    def __init__(self, timeout=None):
+        pass
+
+    def send(self, data: bytes):
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+
+    def poll(self):
+        LOGGER.info("poll")
+        if chunk := sys.stdin.buffer.readline():
+            return chunk
+
+        self.terminate()
+        return b""
+
+    def listen(self):
+        LOGGER.info("listen")
+
+        def printerr(value):
+            """print to stderr"""
+            print(value, file=sys.stderr)
+
+        printerr("listening Standard IO")
+
+    def terminate(self):
+        """terminate process"""
+        LOGGER.info("terminate")
