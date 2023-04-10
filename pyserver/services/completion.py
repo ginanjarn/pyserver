@@ -86,7 +86,7 @@ class CompletionService:
     def build_items(self, completions: List[Completion]) -> List[dict]:
         def build_item(completion: Completion):
             text = completion.name
-            signature = None
+            signature = ""
 
             try:
                 type_name = completion.type
@@ -107,15 +107,13 @@ class CompletionService:
                 "preselect": False,
                 "sortText": text,
                 "filterText": text,
+                "detail": signature,
                 "insertTextFormat": 1,  # insert format = text
                 "textEdit": {
                     "range": self.text_edit_range,
                     "newText": text,
                 },
             }
-
-            if signature:
-                item["detail"] = signature
 
             return item
 
