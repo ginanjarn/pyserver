@@ -37,11 +37,11 @@ class HoverService:
 
     def execute(self) -> List[Name]:
         # only show documentation for keyword and identifier
-        if self.identifier_leaf.type not in {"keyword", "name"}:
-            return []
+        if (leaf := self.identifier_leaf) and leaf.type in {"keyword", "name"}:
+            row, col = self.params.jedi_rowcol()
+            return self.script.help(row, col)
 
-        row, col = self.params.jedi_rowcol()
-        return self.script.help(row, col)
+        return []
 
     def build_item(self, name: Name):
         buffer = StringIO()
