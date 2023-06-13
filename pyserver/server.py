@@ -2,15 +2,11 @@
 
 import logging
 import queue
-import re
 import threading
-import sys
 from collections import namedtuple
-from functools import lru_cache
-from typing import Optional, Any, Callable, Iterator
+from typing import Optional, Any, Callable
 
 from pyserver import errors
-from pyserver.errors import ContentIncomplete
 from pyserver.handler import BaseHandler
 from pyserver.message import RPCMessage
 from pyserver.transport import Transport
@@ -21,95 +17,6 @@ STREAM_HANDLER = logging.StreamHandler()
 LOG_TEMPLATE = "%(levelname)s %(asctime)s %(filename)s:%(lineno)s  %(message)s"
 STREAM_HANDLER.setFormatter(logging.Formatter(LOG_TEMPLATE))
 LOGGER.addHandler(STREAM_HANDLER)
-
-
-class MissingHeader(Exception):
-    """missing header"""
-
-
-class Stream:
-    r"""stream object
-
-    This class handle JSONRPC stream format
-        '<header>\r\n<content>'
-
-    Header items must seperated by '\r\n'
-    """
-
-    HEADER_ENCODING = "ascii"
-    SEPARATOR = b"\r\n\r\n"
-
-    def __init__(self, content: bytes = b""):
-        self.buffer = [content] if content else []
-        self._lock = threading.RLock()
-
-    def put(self, data: bytes) -> None:
-        """put stream data"""
-        with self._lock:
-            self.buffer.append(data)
-
-    @staticmethod
-    @lru_cache(128)
-    def _get_content_length(headers: bytes) -> int:
-        pattern = re.compile(rb"^Content-Length: (\d+)", flags=re.MULTILINE)
-        if found := pattern.search(headers):
-            return int(found.group(1))
-        raise ValueError("unable get 'Content-Length'")
-
-    def get_contents(self) -> Iterator[bytes]:
-        """get contents"""
-
-        def get_content():
-            text_buffer = b"".join(self.buffer)
-
-            if not text_buffer:
-                raise EOFError("buffer empty")
-
-            # read header
-            try:
-                header_end = text_buffer.index(self.SEPARATOR)
-            except ValueError as err:
-                raise MissingHeader("unable get message header") from err
-
-            content_length = self._get_content_length(text_buffer[:header_end])
-
-            # read content
-            start = header_end + len(self.SEPARATOR)
-            end = start + content_length
-            content = text_buffer[start:end]
-
-            recv_len = len(content)
-            if recv_len < content_length:
-                raise ContentIncomplete(f"want: {content_length}, expected: {recv_len}")
-
-            # restore unread buffer
-            self.buffer = [text_buffer[end:]]
-            return content
-
-        while True:
-            with self._lock:
-                try:
-                    content = get_content()
-                except (EOFError, ContentIncomplete):
-                    break
-
-                # fetch next line if missing header
-                # this used to parse from standard io which enforce readline()
-                except MissingHeader as err:
-                    LOGGER.debug(err)
-                    break
-
-                except Exception as err:
-                    LOGGER.critical(err, exc_info=True)
-                    sys.exit(1)
-
-                else:
-                    yield content
-
-    @staticmethod
-    def wrap_content(content: bytes):
-        header = f"Content-Length: {len(content)}".encode(Stream.HEADER_ENCODING)
-        return b"".join([header, Stream.SEPARATOR, content])
 
 
 RequestData = namedtuple("RequestData", ["id_", "method", "params"])
@@ -171,14 +78,19 @@ class RequestHandler:
         thread.start()
 
 
-class Commands:
-    """commands interface"""
+class LSPServer:
+    """LSP server"""
 
-    def __init__(self, transport: Transport):
+    def __init__(self, transport: Transport, handler: BaseHandler, /):
         self.transport = transport
         self.request_id = 0
         self.request_map = {}
         self.canceled_requests = set()
+
+        self.handler = handler
+        self.request_handler = RequestHandler(self.handler.handle, self.send_response)
+
+        self._diagnostics_lock = threading.Lock()
 
     def new_request_id(self):
         self.request_id += 1
@@ -187,7 +99,7 @@ class Commands:
     def send_message(self, message: RPCMessage):
         LOGGER.debug(f"Send >> {message}")
         content = message.to_bytes()
-        self.transport.send(Stream.wrap_content(content))
+        self.transport.write(content)
 
     def send_request(self, method: str, params: Any):
         # cancel all previous request
@@ -211,22 +123,11 @@ class Commands:
     def send_notification(self, method: str, params: Any):
         self.send_message(RPCMessage.notification(method, params))
 
-
-class LSPServer(Commands):
-    """LSP server"""
-
-    def __init__(self, transport: Transport, handler: BaseHandler, /):
-        super().__init__(transport)
-
-        self.handler = handler
-        self.request_handler = RequestHandler(self.handler.handle, self.send_response)
-
-        self._diagnostics_lock = threading.Lock()
-
     def listen(self):
         """listen remote"""
 
         self.request_handler.run()
+        # listen() must not blocking
         threading.Thread(target=self.transport.listen, daemon=True).start()
 
         self._listen_message()
@@ -236,34 +137,26 @@ class LSPServer(Commands):
         self.transport.terminate()
 
     def _listen_message(self):
-        stream = Stream()
-
-        def exec_buffered_message():
-            for content in stream.get_contents():
-                try:
-                    message = RPCMessage.from_bytes(content)
-                    LOGGER.debug(f"Received << {message}")
-
-                except Exception as err:
-                    LOGGER.critical(err, exc_info=True)
-                    sys.exit(1)
-
-                try:
-                    self.exec_message(message)
-                except Exception as err:
-                    LOGGER.error(err, exc_info=True)
-                    self.send_notification(
-                        "window/logMessage", {"type": 1, "message": repr(err)}
-                    )
+        """listen message"""
 
         while True:
-            # exec all buffered message
-            exec_buffered_message()
+            content = self.transport.read()
 
-            chunk = self.transport.poll()
-            stream.put(chunk)
-            if not chunk:
-                return
+            try:
+                message = RPCMessage.from_bytes(content)
+                LOGGER.debug(f"Received << {message}")
+
+            except Exception as err:
+                LOGGER.critical(err, exc_info=True)
+                self.transport.terminate(exit_code=1)
+
+            try:
+                self.exec_message(message)
+            except Exception as err:
+                LOGGER.error(err, exc_info=True)
+                self.send_notification(
+                    "window/logMessage", {"type": 1, "message": repr(err)}
+                )
 
     def _publish_diagnostics(self, params: dict):
         if self._diagnostics_lock.locked():
@@ -301,6 +194,7 @@ class LSPServer(Commands):
             self.handler.handle(method, params)
         except Exception as err:
             LOGGER.error(err, exc_info=True)
+            raise err
 
         if method in {
             "textDocument/didOpen",

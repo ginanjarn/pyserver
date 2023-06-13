@@ -14,15 +14,23 @@ from pyserver import transport
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--stdin", action="store_true")
+    parser = argparse.ArgumentParser(
+        description="Python Language Server implementation"
+    )
+    parser.add_argument(
+        "-i",
+        "--stdin",
+        action="store_true",
+        help="communicate through standard input",
+    )
 
     arguments = parser.parse_args()
 
     if arguments.stdin:
         transport_ = transport.StandardIO()
     else:
-        transport_ = transport.TCPIO()
+        parser.print_help()
+        sys.exit(1)
 
     handler_ = handler.LSPHandler()
     srv = server.LSPServer(transport_, handler_)

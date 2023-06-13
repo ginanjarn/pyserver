@@ -1,10 +1,11 @@
 """transport handler"""
 
 import logging
-import socket
+import re
 import sys
-import threading
-from typing import Protocol, runtime_checkable
+from abc import ABC, abstractmethod
+from functools import lru_cache
+from io import BytesIO
 
 LOGGER = logging.getLogger(__name__)
 # LOGGER.setLevel(logging.DEBUG)  # module logging level
@@ -14,158 +15,110 @@ STREAM_HANDLER.setFormatter(logging.Formatter(LOG_TEMPLATE))
 LOGGER.addHandler(STREAM_HANDLER)
 
 
-@runtime_checkable
-class Transport(Protocol):
-    """Transport Protocoll
-
-    Transport provide connection to remote.
-    Fetch and send data handled by user class.
-
-    methods:
-    * send() -> send message to remote
-    * poll() -> poll message from remote
-    * listen() -> listen connection
-    * terminate() -> terminate connection
-
-    """
-
-    def poll(self) -> bytes:
-        """poll message
-
-        poll() must run in separated thread to listen() or will deadlock
-        """
-
-    def send(self, data: bytes):
-        """send message"""
-
-    def listen(self):
-        """listen connection"""
-
-    def terminate(self):
-        """terminate connection"""
+class HeaderError(ValueError):
+    """header error"""
 
 
-class AddressInUse(OSError):
-    """socket address has used by other process"""
+def wrap_rpc(content: bytes) -> bytes:
+    """wrap content as rpc body"""
+    header = b"Content-Length: %d\r\n" % len(content)
+    return b"%s\r\n%s" % (header, content)
 
 
-class TCPIO:
-    """TCPIO Transport implementation"""
+@lru_cache(maxsize=512)
+def get_content_length(header: bytes) -> int:
+    for line in header.splitlines():
+        if match := re.match(rb"Content-Length: (\d+)", line):
+            return int(match.group(1))
 
-    BUFFER_LENGTH = 4096
-    DEFAULT_ADDRESS = ("localhost", 9825)
-    DEFAULT_TIMEOUT = 60
-
-    def __init__(self, timeout=None):
-
-        self.address = self.DEFAULT_ADDRESS
-        self.conn: socket.socket = None
-
-        self.listen_event = threading.Event()
-        self.connect_event = threading.Event()
-
-        self.timeout = timeout
-        if timeout is None or timeout < 0:
-            self.timeout = self.DEFAULT_TIMEOUT
-
-    def send(self, data: bytes):
-        self.conn.sendall(data)
-
-    def poll(self):
-        LOGGER.info("poll")
-        self.connect_event.wait()
-
-        if self.conn is None:
-            self.terminate()
-            return b""
-
-        try:
-            if chunk := self.conn.recv(self.BUFFER_LENGTH):
-                return chunk
-
-        except ConnectionError as err:
-            LOGGER.debug(err)
-
-        self.terminate()
-        return b""
-
-    def listen(self):
-        LOGGER.info("listen")
-
-        self.listen_event.clear()
-        self.connect_event.clear()
-
-        def printerr(value):
-            """print to stderr"""
-            print(value, file=sys.stderr)
-
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(self.timeout)
-
-                try:
-                    sock.bind(self.address)
-                except OSError as err:
-                    # OSError raised if address has used by other process
-                    raise AddressInUse(err) from err
-
-                sock.listen()
-                printerr(f"listening connection at {self.address}")
-
-                self.conn, addr = sock.accept()
-                self.connect_event.set()
-                printerr(f"accept connection from {addr}")
-
-                # listen until socket closed
-                self.listen_event.wait()
-
-        except ConnectionError as err:
-            LOGGER.debug(err)
-
-        except socket.timeout:
-            printerr(f"no connection at {self.timeout} second(s).\nexit...")
-
-        except AddressInUse as err:
-            printerr(err)
-
-        finally:
-            self.terminate()
-
-    def terminate(self):
-        """terminate process"""
-        LOGGER.info("terminate")
-
-        self.connect_event.set()
-        self.listen_event.set()
+    raise HeaderError("unable get 'Content-Length'")
 
 
-class StandardIO:
+class Transport(ABC):
+    """transport abstraction"""
+
+    @abstractmethod
+    def listen(self) -> None:
+        """listen client message"""
+
+    @abstractmethod
+    def terminate(self) -> None:
+        """terminate"""
+
+    @abstractmethod
+    def write(self, data: bytes) -> None:
+        """write data to client"""
+
+    @abstractmethod
+    def read(self) -> bytes:
+        """read data from client"""
+
+
+class StandardIO(Transport):
     """StandardIO Transport implementation"""
 
-    def __init__(self, timeout=None):
+    def __init__(self):
         pass
 
-    def send(self, data: bytes):
-        sys.stdout.buffer.write(data)
-        sys.stdout.buffer.flush()
-
-    def poll(self):
-        LOGGER.info("poll")
-        if chunk := sys.stdin.buffer.readline():
-            return chunk
-
-        self.terminate()
-        return b""
-
     def listen(self):
-        LOGGER.info("listen")
+        # just wait until terminated
+        pass
 
-        def printerr(value):
-            """print to stderr"""
-            print(value, file=sys.stderr)
+    @property
+    def stdin(self):
+        return sys.stdin.buffer
 
-        printerr("listening Standard IO")
+    @property
+    def stdout(self):
+        return sys.stdout.buffer
 
     def terminate(self):
-        """terminate process"""
-        LOGGER.info("terminate")
+        """terminate"""
+        sys.exit(0)
+
+    def write(self, data: bytes):
+
+        prepared_data = wrap_rpc(data)
+        self.stdout.write(prepared_data)
+        self.stdout.flush()
+
+    def read(self):
+
+        # get header
+        temp_header = BytesIO()
+        n_header = 0
+        while line := self.stdin.readline():
+            # header and content separated by newline with \r\n
+            if line == b"\r\n":
+                break
+
+            n = temp_header.write(line)
+            n_header += n
+
+        # no header received
+        if not n_header:
+            raise EOFError("stdin closed")
+
+        try:
+            content_length = get_content_length(temp_header.getvalue())
+
+        except HeaderError as err:
+            LOGGER.exception("header: %s", temp_header.getvalue())
+            raise err
+
+        # in some case where received content less than content_length
+        temp_content = BytesIO()
+        n_content = 0
+        while True:
+            if n_content < content_length:
+                unread_length = content_length - n_content
+                if chunk := self.stdin.read(unread_length):
+                    n = temp_content.write(chunk)
+                    n_content += n
+                else:
+                    raise EOFError("stdin closed")
+            else:
+                break
+
+        content = temp_content.getvalue()
+        return content
