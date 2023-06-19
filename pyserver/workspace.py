@@ -30,7 +30,6 @@ class Document:
         return message.path_to_uri(self.path)
 
     def did_change(self, content_changes: List[dict]):
-        lines = self.text.split("\n")
         for change in content_changes:
             try:
                 start = change["range"]["start"]
@@ -43,20 +42,20 @@ class Document:
             except KeyError as err:
                 raise errors.InvalidParams(f"invalid params {err}") from err
 
-            new_lines = []
+            lines = self.text.splitlines(keepends=True)
+            temp_lines = []
+
             # pre change line
-            new_lines.extend(lines[:start_line])
+            temp_lines.extend(lines[:start_line])
             # line changed
             prefix = lines[start_line][:start_character]
             suffix = lines[end_line][end_character:]
             line = f"{prefix}{new_text}{suffix}"
-            new_lines.extend(line.split("\n"))
+            temp_lines.append(line)
             # post change line
-            new_lines.extend(lines[end_line + 1 :])
-            # update
-            lines = new_lines
+            temp_lines.extend(lines[end_line + 1 :])
 
-        self.text = "\n".join(lines)
+            self.text = "".join(temp_lines)
 
 
 class Workspace:
