@@ -1,8 +1,6 @@
 """rename service"""
 
-import re
 from dataclasses import dataclass
-from difflib import unified_diff
 from pathlib import Path
 from typing import Dict, Any
 
@@ -11,6 +9,7 @@ from jedi.api.refactoring import Refactoring, RefactoringError
 
 from pyserver import errors
 from pyserver.workspace import Workspace, Document
+from pyserver.services import diffutils
 
 
 @dataclass
@@ -52,62 +51,6 @@ class RenameService:
         except RefactoringError as err:
             raise errors.InvalidRequest(repr(err)) from err
 
-    signature_regex = re.compile(r"@@\ \-(\d+)(?:,(\d+))?\ \+(\d+)(?:,(\d+))? @@")
-
-    @staticmethod
-    def build_diff_items(diff_text: str, origin: str):
-        origin_lines = origin.split("\n")
-        diff_lines = diff_text.split("\n")
-
-        item_range = None
-        buffer = []
-
-        for line in diff_lines:
-
-            if line.startswith("---") or line.startswith("+++"):
-                continue
-
-            if line.startswith("-"):
-                continue
-
-            if line.startswith("+"):
-                buffer.append(line[1:])
-                continue
-
-            if line.startswith(" "):
-                buffer.append(line[1:])
-                continue
-
-            if line.startswith("@@"):
-                if item_range:
-                    yield {"range": item_range, "newText": "\n".join(buffer)}
-
-                match = RenameService.signature_regex.match(line)
-                if not match:
-                    raise ValueError("unable parse diff signature")
-
-                rem_start_line = int(match.group(1)) - 1  # diff use 1-based line index
-                # add_start_line = int(match.group(3)) - 1  # diff use 1-based line index
-
-                rem_changed_line = int(match.group(2)) - 1 if match.group(2) else 0
-                # add_changed_line = int(match.group(4)) - 1 if match.group(4) else 0
-                rem_end_line = rem_start_line + rem_changed_line
-                # add_end_line = add_start_line + add_changed_line
-
-                # set block
-                item_range = {
-                    "start": {"line": rem_start_line, "character": 0},
-                    "end": {
-                        "line": rem_end_line,
-                        "character": len(origin_lines[rem_end_line]),
-                    },
-                }
-                buffer = []
-
-        # yield last block
-        if item_range:
-            yield {"range": item_range, "newText": "\n".join(buffer)}
-
     def build_item(self, refactor: Refactoring):
 
         for file_path, change in refactor.get_changed_files().items():
@@ -121,16 +64,6 @@ class RenameService:
             # normalize newlines
             new_text = new_text.replace("\r\n", "\n").replace("\r", "\n")
 
-            # 'Refactoring.get_diff' method return inconsistent newline result
-            # Use builtin difflib
-            udiff = unified_diff(
-                origin_text.split("\n"),
-                new_text.split("\n"),
-                str(file_path),
-                str(file_path),
-            )
-            diff_text = "\n".join(udiff)
-
             try:
                 document = self.params.workspace.get_document(file_path)
             except errors.InvalidResource:
@@ -141,7 +74,7 @@ class RenameService:
                     "version": document.version,
                     "uri": document.document_uri,
                 },
-                "edits": list(self.build_diff_items(diff_text, origin_text)),
+                "edits": diffutils.get_text_changes(origin_text, new_text),
             }
 
     def get_result(self) -> Dict[str, Any]:
