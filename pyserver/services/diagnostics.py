@@ -22,13 +22,6 @@ class DiagnosticParams:
 KIND_ERROR = 1
 KIND_WARNING = 2
 
-PYFLAKES_REGEX = {
-    # <file_name>:<line>:<column>: <message>
-    KIND_ERROR: re.compile(r".+:(\d+):\d+:\ (.+)"),
-    # <file_name>:<line>:<column> <message>
-    KIND_WARNING: re.compile(r"^.+:(\d+):\d+\ (.+)"),
-}
-
 
 @dataclass
 class ReportItem:
@@ -47,7 +40,11 @@ class Report:
     def _parse_report(self, kind: int):
         report = {KIND_ERROR: self.error, KIND_WARNING: self.warning}[kind]
         # pyflakes report pattern
-        regex = PYFLAKES_REGEX[kind]
+
+        # adapt pattern
+        # - old pattern <file_name>:<line>:<column> <message>
+        # - new pattern <file_name>:<line>:<column>: <message>
+        regex = re.compile(r"^.+:(\d+):\d+:?\ (.+)")
 
         for line in report.splitlines():
             if match := regex.match(line):
