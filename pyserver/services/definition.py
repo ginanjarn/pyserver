@@ -44,7 +44,6 @@ class DefinitionService:
         return self.script.goto(row, col, follow_imports=True)
 
     def build_items(self, names: List[Name]):
-
         # jedi rows start with 1, columns start with 0
         default = (1, 0)
 

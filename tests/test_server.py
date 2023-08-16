@@ -151,7 +151,6 @@ class Stream:
         """
 
         with self._lock:
-
             buffers = b"".join(self.buffer)
             separator = b"\r\n\r\n"
 
@@ -224,7 +223,6 @@ class StandardIO(AbstractTransport):
     def __init__(
         self, executable: str, arguments: List[str], *, env: Optional[dict] = None
     ):
-
         self.server_command = [executable]
         if arguments:
             self.server_command.extend(arguments)
@@ -341,7 +339,6 @@ class TCPIO(AbstractTransport):
     DEFAULT_ADDRESS = ("localhost", 9825)
 
     def __init__(self):
-
         # set default queue
         self._channel = queue.Queue()
 

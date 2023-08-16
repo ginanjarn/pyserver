@@ -41,7 +41,6 @@ class PrepareRenameService:
         )
 
     def execute(self) -> Optional[Identifier]:
-
         # get leaf position
         leaf = self.script._module_node.get_leaf_for_position(self.params.jedi_rowcol())
 

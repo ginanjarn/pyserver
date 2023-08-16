@@ -52,9 +52,7 @@ class RenameService:
             raise errors.InvalidRequest(repr(err)) from err
 
     def build_item(self, refactor: Refactoring):
-
         for file_path, change in refactor.get_changed_files().items():
-
             origin_text = file_path.read_text()
             if file_path == self.params.file_path:
                 # use buffered text

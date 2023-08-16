@@ -77,13 +77,11 @@ class StandardIO(Transport):
         sys.exit(0)
 
     def write(self, data: bytes):
-
         prepared_data = wrap_rpc(data)
         self.stdout.write(prepared_data)
         self.stdout.flush()
 
     def read(self):
-
         # get header
         temp_header = BytesIO()
         n_header = 0

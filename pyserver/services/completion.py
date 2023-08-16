@@ -37,7 +37,6 @@ class CompletionService:
         self.text_edit_range = self._get_replaced_text_range()
 
     def execute(self) -> List[Completion]:
-
         if leaf := self.leaf:
             if leaf.type in {
                 "newline",

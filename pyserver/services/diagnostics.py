@@ -66,7 +66,6 @@ class DiagnosticService:
         self.params = params
 
     def execute(self) -> Report:
-
         # get pyflakes report
         warning_buffer = StringIO()
         error_buffer = StringIO()
