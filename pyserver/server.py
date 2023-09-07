@@ -28,13 +28,13 @@ class RequestHandler:
     def __init__(
         self,
         exec_callback: Callable[[int, str, dict], Any],
-        respond_callback: Callable[[int, Any, Any], None],
+        response_callback: Callable[[int, Any, Any], None],
     ):
         self.request_queue = queue.Queue()
         self.canceled_requests = set()
 
         self.exec_callback = exec_callback
-        self.respond_callback = respond_callback
+        self.response_callback = response_callback
 
     def add(self, request_id, method, params):
         self.request_queue.put(RequestData(request_id, method, params))
@@ -66,7 +66,7 @@ class RequestHandler:
             LOGGER.debug(err, exc_info=True)
             error = errors.InternalError(err)
 
-        self.respond_callback(request.id_, result, errors.transform_error(error))
+        self.response_callback(request.id_, result, errors.transform_error(error))
 
     def _run(self):
         while True:
@@ -203,14 +203,14 @@ class LSPServer:
             # publish diagnostics
             threading.Thread(target=self._publish_diagnostics, args=(params,)).start()
 
-    def exec_response(self, message: RPCMessage):
-        LOGGER.info(f"Exec Response: {message}")
+    def exec_response(self, response: dict):
+        LOGGER.info(f"Exec Response: {response}")
 
-        message_id = message["id"]
+        message_id = response["id"]
         try:
             method = self.request_map.pop(message_id)
 
-            if error := message.get("error"):
+            if error := response.get("error"):
                 if message_id in self.canceled_requests:
                     self.canceled_requests.remove(message_id)
                     return
@@ -221,7 +221,7 @@ class LSPServer:
         except KeyError:
             LOGGER.info(f"invalid response {message_id}")
         else:
-            self.handler.handle(method, message)
+            self.handler.handle(method, response)
 
     def exec_message(self, message: RPCMessage):
         """exec received message"""

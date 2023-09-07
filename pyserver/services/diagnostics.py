@@ -9,7 +9,7 @@ from typing import Dict, Any, Iterator
 from pyflakes import api as pyflakes_api
 from pyflakes.reporter import Reporter
 
-from pyserver.message import path_to_uri
+from pyserver.workspace import path_to_uri
 
 
 @dataclass

@@ -8,8 +8,8 @@ from functools import wraps, lru_cache
 from io import StringIO
 
 from pyserver import errors
-from pyserver import message
-from pyserver.workspace import Workspace, Document
+from pyserver.workspace import Workspace, Document, uri_to_path
+
 
 LOGGER = logging.getLogger(__name__)
 # LOGGER.setLevel(logging.DEBUG)  # module logging level
@@ -111,7 +111,7 @@ class BaseHandler:
         """
         return method.replace("/", "_").replace("$", "s").lower()
 
-    def handle(self, method: str, params: message.RPCMessage):
+    def handle(self, method: str, params: dict):
         try:
             func = getattr(self, self.normalize_method(method))
         except AttributeError as err:
@@ -215,7 +215,7 @@ class LSPHandler(BaseHandler):
 
         try:
             if root_uri := params.get("rootUri"):
-                root_path = message.uri_to_path(root_uri)
+                root_path = uri_to_path(root_uri)
             else:
                 root_path = params["rootPath"]
 
@@ -232,7 +232,7 @@ class LSPHandler(BaseHandler):
     def textdocument_didopen(self, params: dict) -> None:
         LOGGER.debug(f"didopen params: {params}")
         try:
-            file_path = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = uri_to_path(params["textDocument"]["uri"])
             language_id = params["textDocument"]["languageId"]
             version = params["textDocument"]["version"]
             text = params["textDocument"]["text"]
@@ -251,7 +251,7 @@ class LSPHandler(BaseHandler):
     def textdocument_didclose(self, params: dict) -> None:
         LOGGER.debug(f"didclose params: {params}")
         try:
-            file_path = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
@@ -261,19 +261,20 @@ class LSPHandler(BaseHandler):
     @session.ready
     def textdocument_didchange(self, params: dict) -> None:
         try:
-            file_path = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = uri_to_path(params["textDocument"]["uri"])
+            version = params["textDocument"]["version"]
             content_changes = params["contentChanges"]
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        self.workspace.get_document(file_path).did_change(content_changes)
+        self.workspace.change_document(file_path, version, content_changes)
 
     @session.ready
     @check_capability(FEATURE_TEXT_DOCUMENT_COMPLETION)
     def textdocument_completion(self, params: dict) -> None:
         try:
-            file_path = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
@@ -294,7 +295,7 @@ class LSPHandler(BaseHandler):
     @check_capability(FEATURE_TEXT_DOCUMENT_HOVER)
     def textdocument_hover(self, params: dict) -> None:
         try:
-            file_path = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
@@ -313,7 +314,7 @@ class LSPHandler(BaseHandler):
     @check_capability(FEATURE_TEXT_DOCUMENT_FORMATTING)
     def textdocument_formatting(self, params: dict) -> None:
         try:
-            file_path = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
@@ -329,7 +330,7 @@ class LSPHandler(BaseHandler):
     @check_capability(FEATURE_TEXT_DOCUMENT_DEFINITION)
     def textdocument_definition(self, params: dict) -> None:
         try:
-            file_path = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
@@ -350,7 +351,7 @@ class LSPHandler(BaseHandler):
     @check_capability(FEATURE_TEXT_DOCUMENT_DIAGNOSTICS)
     def textdocument_publishdiagnostics(self, params: dict):
         try:
-            file_path = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
             LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
@@ -367,7 +368,7 @@ class LSPHandler(BaseHandler):
     @check_capability(FEATURE_TEXT_DOCUMENT_RENAME)
     def textdocument_preparerename(self, params: dict) -> None:
         try:
-            file_path = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
@@ -387,7 +388,7 @@ class LSPHandler(BaseHandler):
     @check_capability(FEATURE_TEXT_DOCUMENT_RENAME)
     def textdocument_rename(self, params: dict) -> None:
         try:
-            file_path = message.uri_to_path(params["textDocument"]["uri"])
+            file_path = uri_to_path(params["textDocument"]["uri"])
             line = params["position"]["line"]
             character = params["position"]["character"]
             new_name = params["newName"]

@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 from jedi import Script, Project
 from jedi.api.classes import Name
 
-from pyserver.message import path_to_uri
+from pyserver.workspace import path_to_uri
 
 
 @dataclass
