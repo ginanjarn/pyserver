@@ -62,7 +62,10 @@ class HoverService:
         return buffer.getvalue()
 
     def get_result(self) -> Dict[str, Any]:
-        candidates = self.execute()
+        try:
+            candidates = self.execute()
+        except Exception:
+            candidates = []
 
         if not candidates:
             return None
