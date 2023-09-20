@@ -171,6 +171,9 @@ class LSPServer:
                     "textDocument/publishDiagnostics", diagnostics_params
                 )
 
+            except errors.ContentModified:
+                # ignore document modified
+                pass
             except errors.InvalidResource:
                 # ignore document which not in project
                 pass
