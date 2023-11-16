@@ -118,8 +118,9 @@ class Workspace:
 
     def change_document(self, file_path: Path, version: int, changes: List[dict]):
         document = self.get_document(file_path)
-        document.version = version
-        document.did_change(changes)
+        if version > document.version:
+            document.version = version
+            document.did_change(changes)
 
     def get_document(self, file_path: Path) -> Document:
         try:
