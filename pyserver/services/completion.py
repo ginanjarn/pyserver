@@ -1,5 +1,6 @@
 """completion service"""
 
+import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,6 +8,8 @@ from typing import List, Dict, Any
 
 from jedi import Script, Project
 from jedi.api.classes import Completion
+
+DEV_LOGGER = logging.getLogger("pyserver-dev")
 
 
 @dataclass
@@ -96,7 +99,8 @@ class CompletionService:
                         # get first signature
                         signature = signatures[0].to_string()
 
-            except Exception:
+            except Exception as err:
+                DEV_LOGGER.exception("error get 'type_name': %s", err)
                 type_name = None
 
             item = {
@@ -121,7 +125,8 @@ class CompletionService:
     def get_result(self) -> Dict[str, Any]:
         try:
             candidates = self.execute()
-        except Exception:
+        except Exception as err:
+            DEV_LOGGER.exception("error get completion: %s", err)
             candidates = []
 
         # transform as rpc

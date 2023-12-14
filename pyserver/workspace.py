@@ -2,6 +2,7 @@
 
 __all__ = ["DocumentURI", "Document", "Workspace", "path_to_uri", "uri_to_path"]
 
+import logging
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -11,6 +12,8 @@ from urllib.parse import urlparse, urlunparse, quote, unquote
 from urllib.request import pathname2url, url2pathname
 
 from pyserver import errors
+
+DEV_LOGGER = logging.getLogger("pyserver-dev")
 
 
 class DocumentURI(str):
@@ -109,12 +112,14 @@ class Workspace:
         self.documents[file_path] = Document(
             Path(file_path), language_id, version, text
         )
+        DEV_LOGGER.debug("documents: %s", self.documents)
 
     def close_document(self, file_path: Path):
         try:
             del self.documents[file_path]
         except KeyError:
             pass
+        DEV_LOGGER.debug("documents: %s", self.documents)
 
     def change_document(self, file_path: Path, version: int, changes: List[dict]):
         document = self.get_document(file_path)
@@ -123,6 +128,7 @@ class Workspace:
             document.did_change(changes)
 
     def get_document(self, file_path: Path) -> Document:
+        DEV_LOGGER.debug("documents: %s", self.documents)
         try:
             return self.documents[file_path]
         except KeyError as err:

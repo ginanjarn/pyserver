@@ -11,12 +11,8 @@ from pyserver.handler import BaseHandler
 from pyserver.message import RPCMessage
 from pyserver.transport import Transport
 
-LOGGER = logging.getLogger(__name__)
-# LOGGER.setLevel(logging.DEBUG)  # module logging level
-STREAM_HANDLER = logging.StreamHandler()
-LOG_TEMPLATE = "%(levelname)s %(asctime)s %(filename)s:%(lineno)s  %(message)s"
-STREAM_HANDLER.setFormatter(logging.Formatter(LOG_TEMPLATE))
-LOGGER.addHandler(STREAM_HANDLER)
+LOGGER = logging.getLogger("pyserver")
+DEV_LOGGER = logging.getLogger("pyserver-dev")
 
 
 RequestData = namedtuple("RequestData", ["id_", "method", "params"])
@@ -37,9 +33,11 @@ class RequestHandler:
         self.response_callback = response_callback
 
     def add(self, request_id, method, params):
+        DEV_LOGGER.info("add request queue '%s'(%s)", method, request_id)
         self.request_queue.put(RequestData(request_id, method, params))
 
     def cancel(self, request_id: int):
+        DEV_LOGGER.info("cancel request queue (%s)", request_id)
         self.canceled_requests.add(request_id)
 
     def check_canceled(self, request_id: int):
@@ -48,7 +46,7 @@ class RequestHandler:
             raise errors.RequestCanceled(f'request canceled "{request_id}"')
 
     def execute(self, request: RequestData):
-        LOGGER.info(f"Exec Request: {request.method!r} {request.params}")
+        DEV_LOGGER.debug(f"exec request: {request.method!r} {request.params}")
         result, error = None, None
 
         try:
@@ -109,18 +107,22 @@ class LSPServer:
 
         request_id = self.new_request_id()
         self.request_map[request_id] = method
+        LOGGER.info("Send request '%s'(%d)", method, req_id)
         self.send_message(RPCMessage.request(request_id, method, params))
 
     def cancel_request(self, request_id: int):
         self.canceled_requests.add(request_id)
+        LOGGER.info("Cancel request (%d)", id)
         self.send_notification("$/cancelRequest", {"id": request_id})
 
     def send_response(
         self, request_id: int, result: Optional[Any] = None, error: Optional[Any] = None
     ):
+        LOGGER.info("Send response (%d)", request_id)
         self.send_message(RPCMessage.response(request_id, result, error))
 
     def send_notification(self, method: str, params: Any):
+        LOGGER.info("Send notification '%s'", method)
         self.send_message(RPCMessage.notification(method, params))
 
     def listen(self):
@@ -183,8 +185,6 @@ class LSPServer:
                 LOGGER.error(err, exc_info=True)
 
     def exec_notification(self, method, params):
-        LOGGER.info(f"Exec Notification: {method!r} {params}")
-
         if method == "exit":
             self.shutdown()
             return
@@ -207,8 +207,6 @@ class LSPServer:
             threading.Thread(target=self._publish_diagnostics, args=(params,)).start()
 
     def exec_response(self, response: dict):
-        LOGGER.info(f"Exec Response: {response}")
-
         message_id = response["id"]
         try:
             method = self.request_map.pop(message_id)
@@ -218,7 +216,7 @@ class LSPServer:
                     self.canceled_requests.remove(message_id)
                     return
 
-                print(error["message"])
+                LOGGER.info(error["message"])
                 return
 
         except KeyError:
@@ -243,11 +241,14 @@ class LSPServer:
             params = message.get("params")
 
             if message_id is None:
+                LOGGER.info("Handle notification '%s'", method)
                 self.exec_notification(method, params)
             else:
+                LOGGER.info("Handle request '%s'(%d)", method, message_id)
                 self.request_handler.add(message_id, method, params)
 
         elif message_id is not None:
+            LOGGER.info("Handle response: (%d)", message_id)
             self.exec_response(message)
         else:
             LOGGER.error(f"invalid message: {message}")

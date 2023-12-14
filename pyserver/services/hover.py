@@ -1,5 +1,6 @@
 """hover service"""
 
+import logging
 from dataclasses import dataclass
 from html import escape
 from io import StringIO
@@ -8,6 +9,8 @@ from typing import List, Dict, Any
 
 from jedi import Script, Project
 from jedi.api.classes import Name
+
+DEV_LOGGER = logging.getLogger("pyserver-dev")
 
 
 @dataclass
@@ -64,7 +67,8 @@ class HoverService:
     def get_result(self) -> Dict[str, Any]:
         try:
             candidates = self.execute()
-        except Exception:
+        except Exception as err:
+            DEV_LOGGER.exception("error get help: %s", err)
             candidates = []
 
         if not candidates:

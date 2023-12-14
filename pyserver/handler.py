@@ -11,12 +11,8 @@ from pyserver import errors
 from pyserver.workspace import Workspace, Document, uri_to_path
 
 
-LOGGER = logging.getLogger(__name__)
-# LOGGER.setLevel(logging.DEBUG)  # module logging level
-STREAM_HANDLER = logging.StreamHandler()
-LOG_TEMPLATE = "%(levelname)s %(asctime)s %(filename)s:%(lineno)s  %(message)s"
-STREAM_HANDLER.setFormatter(logging.Formatter(LOG_TEMPLATE))
-LOGGER.addHandler(STREAM_HANDLER)
+DEV_LOGGER = logging.getLogger("pyserver-dev")
+
 
 # Error message buffer
 IMPORT_ERROR_MESSAGE = StringIO()
@@ -169,6 +165,7 @@ def VersionedDocument(document: Document):
         post_version = document.version
         # check version changes
         if pre_version != post_version:
+            DEV_LOGGER.debug("want %d, expected %d", pre_version, post_version)
             raise errors.ContentModified(f"{pre_version} != {post_version}")
 
 
@@ -220,7 +217,7 @@ class LSPHandler(BaseHandler):
                 root_path = params["rootPath"]
 
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         # setup workspace
@@ -230,7 +227,6 @@ class LSPHandler(BaseHandler):
 
     @session.ready
     def textdocument_didopen(self, params: dict) -> None:
-        LOGGER.debug(f"didopen params: {params}")
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
             language_id = params["textDocument"]["languageId"]
@@ -238,22 +234,21 @@ class LSPHandler(BaseHandler):
             text = params["textDocument"]["text"]
 
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         self.workspace.open_document(file_path, language_id, version, text)
 
     @session.ready
     def textdocument_didsave(self, params: dict) -> None:
-        LOGGER.debug(f"didsave params: {params}")
+        DEV_LOGGER.debug(f"didsave params: {params}")
 
     @session.ready
     def textdocument_didclose(self, params: dict) -> None:
-        LOGGER.debug(f"didclose params: {params}")
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         self.workspace.close_document(file_path)
@@ -265,7 +260,7 @@ class LSPHandler(BaseHandler):
             version = params["textDocument"]["version"]
             content_changes = params["contentChanges"]
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         self.workspace.change_document(file_path, version, content_changes)
@@ -278,7 +273,7 @@ class LSPHandler(BaseHandler):
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
@@ -299,7 +294,7 @@ class LSPHandler(BaseHandler):
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
@@ -316,7 +311,7 @@ class LSPHandler(BaseHandler):
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
@@ -334,7 +329,7 @@ class LSPHandler(BaseHandler):
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
@@ -353,7 +348,7 @@ class LSPHandler(BaseHandler):
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
@@ -372,7 +367,7 @@ class LSPHandler(BaseHandler):
             line = params["position"]["line"]
             character = params["position"]["character"]
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
@@ -393,7 +388,7 @@ class LSPHandler(BaseHandler):
             character = params["position"]["character"]
             new_name = params["newName"]
         except KeyError as err:
-            LOGGER.debug(f"params: {params}")
+            DEV_LOGGER.debug(f"params: {params}")
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:

@@ -1,5 +1,6 @@
 """rename service"""
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any
@@ -10,6 +11,8 @@ from jedi.api.refactoring import Refactoring, RefactoringError
 from pyserver import errors
 from pyserver.workspace import Workspace, Document
 from pyserver.services import diffutils
+
+DEV_LOGGER = logging.getLogger("pyserver-dev")
 
 
 @dataclass
@@ -49,6 +52,7 @@ class RenameService:
         try:
             return self.script.rename(row, col, new_name=self.params.new_name)
         except RefactoringError as err:
+            DEV_LOGGER.exception("error rename: %s", err)
             raise errors.InvalidRequest(repr(err)) from err
 
     def build_item(self, refactor: Refactoring):
@@ -64,7 +68,8 @@ class RenameService:
 
             try:
                 document = self.params.workspace.get_document(file_path)
-            except errors.InvalidResource:
+            except errors.InvalidResource as err:
+                DEV_LOGGER.debug("document not opened: %s", err)
                 document = Document.from_file(file_path)
 
             yield {

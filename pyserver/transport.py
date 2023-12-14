@@ -7,12 +7,7 @@ from abc import ABC, abstractmethod
 from functools import lru_cache
 from io import BytesIO
 
-LOGGER = logging.getLogger(__name__)
-# LOGGER.setLevel(logging.DEBUG)  # module logging level
-STREAM_HANDLER = logging.StreamHandler()
-LOG_TEMPLATE = "%(levelname)s %(asctime)s %(filename)s:%(lineno)s  %(message)s"
-STREAM_HANDLER.setFormatter(logging.Formatter(LOG_TEMPLATE))
-LOGGER.addHandler(STREAM_HANDLER)
+DEV_LOGGER = logging.getLogger("pyserver-dev")
 
 
 class HeaderError(ValueError):
@@ -95,13 +90,15 @@ class StandardIO(Transport):
 
         # no header received
         if not n_header:
+            DEV_LOGGER.error("stdin closed")
             raise EOFError("stdin closed")
 
         try:
+            DEV_LOGGER.debug("header: %s", temp_header.getvalue())
             content_length = get_content_length(temp_header.getvalue())
 
         except HeaderError as err:
-            LOGGER.exception("header: %s", temp_header.getvalue())
+            DEV_LOGGER.exception(err, exc_info=True)
             raise err
 
         # in some case where received content less than content_length
@@ -109,6 +106,7 @@ class StandardIO(Transport):
         n_content = 0
         while True:
             if n_content < content_length:
+                DEV_LOGGER.debug("want %d, expected %d", n_content, content_length)
                 unread_length = content_length - n_content
                 if chunk := self.stdin.read(unread_length):
                     n = temp_content.write(chunk)
