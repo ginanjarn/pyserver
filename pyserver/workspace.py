@@ -109,6 +109,9 @@ class Workspace:
         return f"Workspace(root_path={self.root_path!r},documents={self.documents!r})"
 
     def open_document(self, file_path: Path, language_id: str, version: int, text: str):
+        if file_path in self.documents:
+            self.close_document(file_path)
+
         self.documents[file_path] = Document(
             Path(file_path), language_id, version, text
         )
