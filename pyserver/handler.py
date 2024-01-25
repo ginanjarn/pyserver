@@ -166,7 +166,9 @@ def VersionedDocument(document: Document):
         # check version changes
         if pre_version != post_version:
             DEV_LOGGER.debug("want %d, expected %d", pre_version, post_version)
-            raise errors.ContentModified(f"{pre_version} != {post_version}")
+            raise errors.ContentModified(
+                f"version changed. want:{pre_version}, expected:{post_version}"
+            )
 
 
 def check_capability(capability: str):
