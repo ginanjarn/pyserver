@@ -56,7 +56,12 @@ class HoverService:
             buffer.write(f"### {name.type} `{name.name}`\n\n")
 
         if name.type != "module":
-            content = name._get_docstring_signature() or name.name
+            try:
+                signature = name._get_docstring_signature()
+            except Exception:
+                signature = ""
+
+            content = signature or name.name
             buffer.write(f"```python\n{content}\n```\n\n")
 
         if description := name._get_docstring():
