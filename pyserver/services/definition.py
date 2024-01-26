@@ -1,6 +1,5 @@
 """completion service"""
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any
@@ -9,8 +8,6 @@ from jedi import Script, Project
 from jedi.api.classes import Name
 
 from pyserver.workspace import path_to_uri
-
-DEV_LOGGER = logging.getLogger("pyserver-dev")
 
 
 @dataclass
@@ -55,8 +52,7 @@ class DefinitionService:
                 path = name.module_path
                 start = name.get_definition_start_position() or default
                 end = name.get_definition_end_position() or default
-            except Exception as err:
-                DEV_LOGGER.exception("error get location: %s", err)
+            except Exception:
                 continue
 
             # may be path unknown

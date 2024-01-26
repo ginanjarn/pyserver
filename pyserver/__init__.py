@@ -33,12 +33,10 @@ FILE_HANDLER.setFormatter(logging.Formatter(LOGGING_FORMAT))
 
 # logging channel
 LOGGER = logging.getLogger("pyserver")
-DEV_LOGGER = logging.getLogger("pyserver-dev")
 
 # set handler
 LOGGER.addHandler(STREAM_HANDLER)
 LOGGER.addHandler(FILE_HANDLER)
-DEV_LOGGER.addHandler(STREAM_HANDLER)
 
 
 def main():
@@ -54,7 +52,6 @@ def main():
 
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-vv", "--veryverbose", action="store_true")
-    parser.add_argument("-dev", "--devmode", action="store_true")
 
     arguments = parser.parse_args()
 
@@ -69,9 +66,6 @@ def main():
 
     if arguments.veryverbose:
         LOGGER.setLevel(logging.DEBUG)
-
-    if arguments.devmode:
-        DEV_LOGGER.setLevel(LOGGER.level)
 
     handler_ = handler.LSPHandler()
     srv = server.LSPServer(transport_, handler_)
