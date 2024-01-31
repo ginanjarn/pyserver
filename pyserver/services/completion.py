@@ -37,20 +37,44 @@ class CompletionService:
         self.text_edit_range = self._get_replaced_text_range()
 
     def execute(self) -> List[Completion]:
-        if leaf := self.leaf:
-            if leaf.type in {
-                "newline",
-                "string",
-                "fstring_string",
-                "number",
-            }:
-                return []
-
-            if leaf.type == "operator" and leaf.value in ":)]}":
-                return []
+        if not self.fetch_completion():
+            return []
 
         row, col = self.params.jedi_rowcol()
         return self.script.complete(row, col)
+
+    def fetch_completion(self) -> bool:
+        leaf = self.leaf
+        if not leaf:
+            return True
+
+        ltype = leaf.type
+
+        if ltype in {"string", "fstring_string", "number"}:
+            return False
+
+        # closing scope operator
+        close_operator = ":)]}"
+
+        if leaf.value in close_operator:
+            return False
+
+        if ltype in {"endmarker", "newline"}:
+            prev = leaf.get_previous_leaf()
+            if not prev:
+                return False
+
+            # after keyword eg: 'import', 'from' etc
+            if prev.type == "keyword":
+                return True
+
+            # after close scope
+            if prev.value in close_operator:
+                return False
+
+            return True
+
+        return True
 
     kind_map = defaultdict(
         lambda: 1,  # default 'text'
