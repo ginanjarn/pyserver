@@ -52,10 +52,13 @@ class RequestHandler:
             # may be request canceled during execute
             self.check_canceled(request.id_)
 
-        except errors.RequestCanceled as err:
+        except (
+            errors.ContentModified,
+            errors.RequestCanceled,
+            errors.FeatureDisabled,
+        ) as err:
             error = err
-        except errors.FeatureDisabled as err:
-            error = err
+
         except Exception as err:
             LOGGER.exception(err, exc_info=True)
             error = errors.InternalError(err)
