@@ -2,7 +2,6 @@
 
 __all__ = ["DocumentURI", "Document", "Workspace", "path_to_uri", "uri_to_path"]
 
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict, Union
@@ -40,16 +39,16 @@ def uri_to_path(uri: Path) -> DocumentURI:
     return DocumentURI(uri).to_path()
 
 
-@dataclass
 class Document:
     """Document object"""
 
-    path: Path
-    language_id: str
-    version: int
-    text: str
-
     __slots__ = ["path", "language_id", "version", "text"]
+
+    def __init__(self, path: Path, language_id: str, version: int, text: str):
+        self.path = path
+        self.language_id = language_id
+        self.version = version
+        self.text = text
 
     @classmethod
     def from_file(cls, file_path: Union[Path, str]):
