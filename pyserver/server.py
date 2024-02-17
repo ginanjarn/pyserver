@@ -98,7 +98,7 @@ class LSPServer:
         return self.request_id
 
     def send_message(self, message: RPCMessage):
-        LOGGER.debug(f"Send >> {message}")
+        LOGGER.debug("Send >> %s", message)
         content = message.to_bytes()
         self.transport.write(content)
 
@@ -145,7 +145,7 @@ class LSPServer:
 
             try:
                 message = RPCMessage.from_bytes(content)
-                LOGGER.debug(f"Received << {message}")
+                LOGGER.debug("Received << %s", message)
 
             except Exception as err:
                 LOGGER.critical(err, exc_info=True)
