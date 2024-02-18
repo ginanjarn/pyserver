@@ -4,7 +4,7 @@ __all__ = ["DocumentURI", "Document", "Workspace", "path_to_uri", "uri_to_path"]
 
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Dict, Union
+from typing import List, Dict
 
 from urllib.parse import urlparse, urlunparse, quote, unquote
 from urllib.request import pathname2url, url2pathname
@@ -42,25 +42,31 @@ def uri_to_path(uri: Path) -> DocumentURI:
 class Document:
     """Document object"""
 
-    __slots__ = ["path", "language_id", "version", "text"]
+    __slots__ = ["workspace", "path", "language_id", "version", "text"]
 
-    def __init__(self, path: Path, language_id: str, version: int, text: str):
+    def __init__(
+        self,
+        workspace: "Workspace",
+        path: Path,
+        language_id: str,
+        version: int,
+        text: str,
+    ):
+        self.workspace = workspace
         self.path = path
         self.language_id = language_id
         self.version = version
         self.text = text
 
-    @classmethod
-    def from_file(cls, file_path: Union[Path, str]):
-        text = Path(file_path).read_text()
-        return cls(file_path, "", 0, text)
+    def __repr__(self) -> str:
+        return f"Document({self.path!r})"
 
     @property
     def document_uri(self) -> str:
         """document uri"""
         return path_to_uri(self.path)
 
-    def did_change(self, content_changes: List[dict]):
+    def apply_changes(self, content_changes: List[dict]):
         for change in content_changes:
             try:
                 start = change["range"]["start"]
@@ -88,6 +94,11 @@ class Document:
 
             self.text = "\n".join(temp_lines)
 
+    def did_change(self, version: int, content_changes: List[dict], /):
+        if version > self.version:
+            self.apply_changes(content_changes)
+            self.version = version
+
 
 class Workspace:
     """workspace handler"""
@@ -104,25 +115,19 @@ class Workspace:
     def __repr__(self):
         return f"Workspace(root_path={self.root_path!r},documents={self.documents!r})"
 
-    def open_document(self, file_path: Path, language_id: str, version: int, text: str):
+    def add_document(self, file_path: Path, language_id: str, version: int, text: str):
         if file_path in self.documents:
-            self.close_document(file_path)
+            self.remove_document(file_path)
 
         self.documents[file_path] = Document(
-            Path(file_path), language_id, version, text
+            self, Path(file_path), language_id, version, text
         )
 
-    def close_document(self, file_path: Path):
+    def remove_document(self, file_path: Path):
         try:
             del self.documents[file_path]
         except KeyError:
             pass
-
-    def change_document(self, file_path: Path, version: int, changes: List[dict]):
-        document = self.get_document(file_path)
-        if version > document.version:
-            document.version = version
-            document.did_change(changes)
 
     def get_document(self, file_path: Path) -> Document:
         try:

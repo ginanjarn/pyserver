@@ -232,7 +232,7 @@ class LSPHandler(BaseHandler):
         except KeyError as err:
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        self.workspace.open_document(file_path, language_id, version, text)
+        self.workspace.add_document(file_path, language_id, version, text)
 
     @session.ready
     def textdocument_didsave(self, params: dict) -> None:
@@ -245,7 +245,7 @@ class LSPHandler(BaseHandler):
         except KeyError as err:
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        self.workspace.close_document(file_path)
+        self.workspace.remove_document(file_path)
 
     @session.ready
     def textdocument_didchange(self, params: dict) -> None:
@@ -256,7 +256,8 @@ class LSPHandler(BaseHandler):
         except KeyError as err:
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        self.workspace.change_document(file_path, version, content_changes)
+        document = self.workspace.get_document(file_path)
+        document.did_change(version, content_changes)
 
     @session.ready
     @check_capability(FEATURE_TEXT_DOCUMENT_COMPLETION)
