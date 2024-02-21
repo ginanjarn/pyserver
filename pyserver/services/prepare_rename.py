@@ -1,25 +1,30 @@
 """prepare rename service"""
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, Any, Optional
 
 from jedi import Script, Project
 
+from pyserver.workspace import Document, Workspace
+
 
 @dataclass
 class PrepareRenameParams:
-    root_path: Path
-    file_path: Path
-    text: str
+    document: Document
     line: int
     character: int
 
     def jedi_rowcol(self):
         return (self.line + 1, self.character)
 
-    def jedi_project(self) -> Project:
-        return Project(self.root_path)
+    def file_path(self):
+        return self.document.path
+
+    def text(self):
+        return self.document.text
+
+    def workspace(self) -> Workspace:
+        return self.document.workspace
 
 
 @dataclass
@@ -35,9 +40,9 @@ class PrepareRenameService:
     def __init__(self, params: PrepareRenameParams):
         self.params = params
         self.script = Script(
-            self.params.text,
-            path=self.params.file_path,
-            project=self.params.jedi_project(),
+            self.params.text(),
+            path=self.params.file_path(),
+            project=Project(self.params.workspace().root_path),
         )
 
     def execute(self) -> Optional[Identifier]:
@@ -54,8 +59,8 @@ class PrepareRenameService:
             if name.in_builtin_module():
                 raise ValueError("unable rename 'builtin'")
 
-            if (path := name.module_path) and str(path).startswith(
-                str(self.params.root_path)
+            if (path := name.module_path) and path.is_relative_to(
+                self.params.workspace().root_path
             ):
                 # only rename object inside of project
                 continue

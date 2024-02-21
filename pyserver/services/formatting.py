@@ -1,18 +1,20 @@
 """formatting service"""
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, Any, List
 
 import black
 
 from pyserver.services import diffutils
+from pyserver.workspace import Document
 
 
 @dataclass
 class FormattingParams:
-    file_path: Path
-    text: Path
+    document: Document
+
+    def text(self):
+        return self.document.text
 
 
 class FormattingService:
@@ -20,13 +22,14 @@ class FormattingService:
         self.params = params
 
     def execute(self) -> str:
+        text = self.params.text()
         try:
-            new_str = black.format_str(self.params.text, mode=black.FileMode())
+            new_str = black.format_str(text, mode=black.FileMode())
         except black.NothingChanged:
-            return self.params.text
+            return text
         else:
             return new_str
 
     def get_result(self) -> List[Dict[str, Any]]:
         formatted_str = self.execute()
-        return diffutils.get_text_changes(self.params.text, formatted_str)
+        return diffutils.get_text_changes(self.params.text(), formatted_str)

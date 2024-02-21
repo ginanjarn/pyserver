@@ -3,20 +3,29 @@
 import re
 from dataclasses import dataclass
 from io import StringIO
-from pathlib import Path
 from typing import Dict, Any, Iterator
 
 from pyflakes import api as pyflakes_api
 from pyflakes.reporter import Reporter
 
-from pyserver.workspace import path_to_uri
+from pyserver.workspace import Workspace, Document, path_to_uri
 
 
 @dataclass
 class DiagnosticParams:
-    file_path: Path
-    text: str
-    version: int
+    document: Document
+
+    def file_path(self):
+        return self.document.path
+
+    def text(self):
+        return self.document.text
+
+    def workspace(self) -> Workspace:
+        return self.document.workspace
+
+    def version(self):
+        return self.document.version
 
 
 KIND_ERROR = 1
@@ -71,14 +80,14 @@ class DiagnosticService:
         error_buffer = StringIO()
 
         reporter = Reporter(warning_buffer, error_buffer)
-        pyflakes_api.check(self.params.text, str(self.params.file_path), reporter)
+        pyflakes_api.check(self.params.text(), str(self.params.file_path()), reporter)
 
         return Report(
             "pyflakes", warning=warning_buffer.getvalue(), error=error_buffer.getvalue()
         )
 
     def build_items(self, report: Report) -> Iterator[Dict[str, Any]]:
-        lines = self.params.text.split("\n")
+        lines = self.params.text().split("\n")
 
         def build_line_item(item: ReportItem):
             return {
@@ -99,7 +108,7 @@ class DiagnosticService:
     def get_result(self) -> Dict[str, Any]:
         report = self.execute()
         return {
-            "uri": path_to_uri(self.params.file_path),
-            "version": self.params.version,
+            "uri": path_to_uri(self.params.file_path()),
+            "version": self.params.version(),
             "diagnostics": list(self.build_items(report)),
         }

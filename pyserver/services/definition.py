@@ -1,20 +1,17 @@
 """completion service"""
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import List, Dict, Any
 
 from jedi import Script, Project
 from jedi.api.classes import Name
 
-from pyserver.workspace import path_to_uri
+from pyserver.workspace import Workspace, Document, path_to_uri
 
 
 @dataclass
 class DefinitionParams:
-    root_path: Path
-    file_path: Path
-    text: str
+    document: Document
     line: int
     character: int
 
@@ -22,14 +19,23 @@ class DefinitionParams:
         # jedi use one based line index
         return self.line + 1, self.character
 
+    def file_path(self):
+        return self.document.path
+
+    def text(self):
+        return self.document.text
+
+    def workspace(self) -> Workspace:
+        return self.document.workspace
+
 
 class DefinitionService:
     def __init__(self, params: DefinitionParams):
         self.params = params
         self.script = Script(
-            self.params.text,
-            path=self.params.file_path,
-            project=Project(self.params.root_path),
+            self.params.text(),
+            path=self.params.file_path(),
+            project=Project(self.params.workspace().root_path),
         )
         self.identifier_leaf = self.script._module_node.get_leaf_for_position(
             self.params.jedi_rowcol()

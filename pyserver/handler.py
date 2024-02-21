@@ -270,12 +270,7 @@ class LSPHandler(BaseHandler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
-            root_path = self.workspace.root_path
-            text = document.text
-
-            params = completion.CompletionParams(
-                root_path, file_path, text, line, character
-            )
+            params = completion.CompletionParams(document, line, character)
             service = completion.CompletionService(params)
             return service.get_result()
 
@@ -290,10 +285,7 @@ class LSPHandler(BaseHandler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
-            root_path = self.workspace.root_path
-            text = document.text
-
-            params = hover.HoverParams(root_path, file_path, text, line, character)
+            params = hover.HoverParams(document, line, character)
             service = hover.HoverService(params)
             return service.get_result()
 
@@ -306,9 +298,7 @@ class LSPHandler(BaseHandler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
-            text = document.text
-
-            params = formatting.FormattingParams(file_path, text)
+            params = formatting.FormattingParams(document)
             service = formatting.FormattingService(params)
             return service.get_result()
 
@@ -323,12 +313,7 @@ class LSPHandler(BaseHandler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
-            root_path = self.workspace.root_path
-            text = document.text
-
-            params = definition.DefinitionParams(
-                root_path, file_path, text, line, character
-            )
+            params = definition.DefinitionParams(document, line, character)
             service = definition.DefinitionService(params)
             return service.get_result()
 
@@ -341,10 +326,7 @@ class LSPHandler(BaseHandler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
-            text = document.text
-            version = document.version
-
-            params = diagnostics.DiagnosticParams(file_path, text, version)
+            params = diagnostics.DiagnosticParams(document)
             service = diagnostics.DiagnosticService(params)
             return service.get_result()
 
@@ -359,11 +341,7 @@ class LSPHandler(BaseHandler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
-            text = document.text
-
-            params = prepare_rename.PrepareRenameParams(
-                self.workspace.root_path, file_path, text, line, character
-            )
+            params = prepare_rename.PrepareRenameParams(document, line, character)
             service = prepare_rename.PrepareRenameService(params)
             return service.get_result()
 
@@ -379,8 +357,6 @@ class LSPHandler(BaseHandler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
-            params = rename.RenameParams(
-                self.workspace, document.path, line, character, new_name
-            )
+            params = rename.RenameParams(document, line, character, new_name)
             service = rename.RenameService(params)
             return service.get_result()
