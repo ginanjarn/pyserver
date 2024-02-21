@@ -12,6 +12,7 @@ from urllib.request import pathname2url, url2pathname
 from pyserver import errors
 
 
+# DocumentURI based on 'str' to make it JSON serializable
 class DocumentURI(str):
     """document uri"""
 
@@ -30,12 +31,12 @@ class DocumentURI(str):
 
 
 @lru_cache(128)
-def path_to_uri(path: str) -> Path:
+def path_to_uri(path: Path) -> DocumentURI:
     return DocumentURI.from_path(path)
 
 
 @lru_cache(128)
-def uri_to_path(uri: Path) -> DocumentURI:
+def uri_to_path(uri: DocumentURI) -> Path:
     return DocumentURI(uri).to_path()
 
 
