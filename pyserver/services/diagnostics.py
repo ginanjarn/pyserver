@@ -1,9 +1,10 @@
 """completion service"""
 
 import re
+from collections import namedtuple
 from dataclasses import dataclass
 from io import StringIO
-from typing import Dict, Any, Iterator
+from typing import Dict, Any, Iterator, Iterable
 
 from pyflakes import api as pyflakes_api
 from pyflakes.reporter import Reporter
@@ -32,83 +33,82 @@ KIND_ERROR = 1
 KIND_WARNING = 2
 
 
-@dataclass
-class ReportItem:
-    source: str
-    severity_kind: int
-    lineno: int
-    message: str
+Diagnostic = namedtuple(
+    "Diagnostic", ["severity", "file_name", "line", "column", "message", "source"]
+)
 
 
-@dataclass
-class Report:
-    source: str
-    error: str
-    warning: str
+class PyflakesDiagnostic:
+    def __init__(self, file_name: str, text: str, /):
+        self.file_name = file_name
+        self.text = text
 
-    def _parse_report(self, kind: int):
-        report = {KIND_ERROR: self.error, KIND_WARNING: self.warning}[kind]
-        # pyflakes report pattern
+    # pattern '<file_name>:<line>:<column>:? <message>'
+    report_pattern = re.compile(r"^(.+):(\d+):(\d+):?\ (.+)")
 
-        # adapt pattern
-        # - old pattern <file_name>:<line>:<column> <message>
-        # - new pattern <file_name>:<line>:<column>: <message>
-        regex = re.compile(r"^.+:(\d+):\d+:?\ (.+)")
+    def get_diagnostic(self) -> Iterator[Diagnostic]:
+        # Pyflakes reporter
+        warning_buffer = StringIO()
+        error_buffer = StringIO()
+        reporter = Reporter(warning_buffer, error_buffer)
 
-        for line in report.splitlines():
-            if match := regex.match(line):
-                lineno, message = match.groups()
-                # use zero based line index
-                lineno = int(lineno) - 1
-                yield ReportItem(self.source, kind, int(lineno), message)
+        pyflakes_api.check(self.text, self.file_name, reporter)
 
-    def get_items(self) -> Iterator[ReportItem]:
-        if self.error:
-            yield from self._parse_report(KIND_ERROR)
+        yield from self.parse_report(KIND_ERROR, error_buffer)
+        yield from self.parse_report(KIND_WARNING, warning_buffer)
 
-        elif self.warning:
-            yield from self._parse_report(KIND_WARNING)
+    def parse_report(
+        self, severity_kind: int, buffer: StringIO
+    ) -> Iterator[Diagnostic]:
+        # Seek offset to beginnig of buffer
+        buffer.seek(0)
+
+        while line := buffer.readline():
+            if match := self.report_pattern.match(line):
+                file_name, line, column, message = match.groups()
+                yield Diagnostic(
+                    severity_kind,
+                    file_name,
+                    int(line) - 1,  # Pyflakes use 1 based line index
+                    int(column),
+                    message,
+                    "pyflakes",
+                )
 
 
 class DiagnosticService:
     def __init__(self, params: DiagnosticParams):
         self.params = params
 
-    def execute(self) -> Report:
-        # get pyflakes report
-        warning_buffer = StringIO()
-        error_buffer = StringIO()
+    def execute(self) -> Diagnostic:
+        diagnostic = PyflakesDiagnostic(self.params.file_path(), self.params.text())
+        return diagnostic.get_diagnostic()
 
-        reporter = Reporter(warning_buffer, error_buffer)
-        pyflakes_api.check(self.params.text(), str(self.params.file_path()), reporter)
-
-        return Report(
-            "pyflakes", warning=warning_buffer.getvalue(), error=error_buffer.getvalue()
-        )
-
-    def build_items(self, report: Report) -> Iterator[Dict[str, Any]]:
+    def build_items(
+        self, diagnostics: Iterable[Diagnostic]
+    ) -> Iterator[Dict[str, Any]]:
         lines = self.params.text().split("\n")
 
-        def build_line_item(item: ReportItem):
+        def build_line_item(item: Diagnostic):
             return {
                 # unable determine error location correctly
                 # put the line as range
                 "range": {
-                    "start": {"line": item.lineno, "character": 0},
-                    "end": {"line": item.lineno, "character": len(lines[item.lineno])},
+                    "start": {"line": item.line, "character": 0},
+                    "end": {"line": item.line, "character": len(lines[item.line])},
                 },
-                "severity": item.severity_kind,
+                "severity": item.severity,
                 "source": item.source,
                 "message": item.message,
             }
 
-        for item in report.get_items():
+        for item in diagnostics:
             yield build_line_item(item)
 
     def get_result(self) -> Dict[str, Any]:
-        report = self.execute()
+        diagnostics = self.execute()
         return {
             "uri": path_to_uri(self.params.file_path()),
             "version": self.params.version(),
-            "diagnostics": list(self.build_items(report)),
+            "diagnostics": list(self.build_items(diagnostics)),
         }
