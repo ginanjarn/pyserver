@@ -1,93 +1,35 @@
 """command handler"""
 
 import sys
-from collections import defaultdict
 from contextlib import contextmanager
 from functools import wraps, lru_cache
-from io import StringIO
 
 from pyserver import errors
 from pyserver.workspace import Workspace, Document, uri_to_path
 
 
-# Error message buffer
-IMPORT_ERROR_MESSAGE = StringIO()
-
-# Feature names
-FEATURE_TEXT_DOCUMENT_COMPLETION = "textDocument/completion"
-FEATURE_TEXT_DOCUMENT_HOVER = "textDocument/hover"
-FEATURE_TEXT_DOCUMENT_FORMATTING = "textDocument/formatting"
-FEATURE_TEXT_DOCUMENT_DEFINITION = "textDocument/definition"
-FEATURE_TEXT_DOCUMENT_DIAGNOSTICS = "textDocument/diagnostics"
-FEATURE_TEXT_DOCUMENT_RENAME = "textDocument/rename"
-
-# Feature capability
-FEATURE_CAPABILITY = defaultdict(bool)
-
 try:
     from pyserver.services import completion
-
-    FEATURE_CAPABILITY[FEATURE_TEXT_DOCUMENT_COMPLETION] = True
-
-except ImportError as err:
-    IMPORT_ERROR_MESSAGE.write(f"{err}\n")
-
-try:
     from pyserver.services import hover
-
-    FEATURE_CAPABILITY[FEATURE_TEXT_DOCUMENT_HOVER] = True
-
-except ImportError as err:
-    IMPORT_ERROR_MESSAGE.write(f"{err}\n")
-
-try:
     from pyserver.services import formatting
-
-    FEATURE_CAPABILITY[FEATURE_TEXT_DOCUMENT_FORMATTING] = True
-
-except ImportError as err:
-    IMPORT_ERROR_MESSAGE.write(f"{err}\n")
-
-try:
     from pyserver.services import definition
-
-    FEATURE_CAPABILITY[FEATURE_TEXT_DOCUMENT_DEFINITION] = True
-
-except ImportError as err:
-    IMPORT_ERROR_MESSAGE.write(f"{err}\n")
-
-try:
     from pyserver.services import diagnostics
-
-    FEATURE_CAPABILITY[FEATURE_TEXT_DOCUMENT_DIAGNOSTICS] = True
-
-except ImportError as err:
-    IMPORT_ERROR_MESSAGE.write(f"{err}\n")
-
-try:
     from pyserver.services import prepare_rename
-
-    FEATURE_CAPABILITY[FEATURE_TEXT_DOCUMENT_RENAME] = True
-
-except ImportError as err:
-    IMPORT_ERROR_MESSAGE.write(f"{err}\n")
-
-try:
     from pyserver.services import rename
 
-    FEATURE_CAPABILITY[FEATURE_TEXT_DOCUMENT_RENAME] = True
-
 except ImportError as err:
-    IMPORT_ERROR_MESSAGE.write(f"{err}\n")
+    message = """\
+Error import required packages!
 
-if IMPORT_ERROR_MESSAGE.getvalue():
-    IMPORT_ERROR_MESSAGE.write("\nSOME FEATURES WILL BE UNAVAILABLE !!!\n\n")
+Following required packages must be installed:
+- jedi
+- black
+- pyflakes
 
-    IMPORT_ERROR_MESSAGE.write("Feature capability:\n")
-    for name, value in FEATURE_CAPABILITY.items():
-        IMPORT_ERROR_MESSAGE.write(f" * {name} : {value}\n")
-
-    print(IMPORT_ERROR_MESSAGE.getvalue(), file=sys.stderr)
+"""
+    print(message, file=sys.stderr)
+    print(f"error: {err!r}", file=sys.stderr)
+    sys.exit(1)
 
 
 class BaseHandler:
@@ -164,22 +106,6 @@ def VersionedDocument(document: Document):
             raise errors.ContentModified(
                 f"version changed. want:{pre_version}, expected:{post_version}"
             )
-
-
-def check_capability(capability: str):
-    """check feature capability"""
-
-    def inner(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            if not FEATURE_CAPABILITY[capability]:
-                raise errors.FeatureDisabled(f"feature {capability!r} is disabled")
-
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return inner
 
 
 class LSPHandler(BaseHandler):
@@ -260,7 +186,6 @@ class LSPHandler(BaseHandler):
         document.did_change(version, content_changes)
 
     @session.ready
-    @check_capability(FEATURE_TEXT_DOCUMENT_COMPLETION)
     def textdocument_completion(self, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
@@ -275,7 +200,6 @@ class LSPHandler(BaseHandler):
             return service.get_result()
 
     @session.ready
-    @check_capability(FEATURE_TEXT_DOCUMENT_HOVER)
     def textdocument_hover(self, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
@@ -290,7 +214,6 @@ class LSPHandler(BaseHandler):
             return service.get_result()
 
     @session.ready
-    @check_capability(FEATURE_TEXT_DOCUMENT_FORMATTING)
     def textdocument_formatting(self, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
@@ -303,7 +226,6 @@ class LSPHandler(BaseHandler):
             return service.get_result()
 
     @session.ready
-    @check_capability(FEATURE_TEXT_DOCUMENT_DEFINITION)
     def textdocument_definition(self, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
@@ -318,7 +240,6 @@ class LSPHandler(BaseHandler):
             return service.get_result()
 
     @session.ready
-    @check_capability(FEATURE_TEXT_DOCUMENT_DIAGNOSTICS)
     def textdocument_publishdiagnostics(self, params: dict):
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
@@ -331,7 +252,6 @@ class LSPHandler(BaseHandler):
             return service.get_result()
 
     @session.ready
-    @check_capability(FEATURE_TEXT_DOCUMENT_RENAME)
     def textdocument_preparerename(self, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
@@ -346,7 +266,6 @@ class LSPHandler(BaseHandler):
             return service.get_result()
 
     @session.ready
-    @check_capability(FEATURE_TEXT_DOCUMENT_RENAME)
     def textdocument_rename(self, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
