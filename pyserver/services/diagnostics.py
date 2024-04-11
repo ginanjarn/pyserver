@@ -9,7 +9,14 @@ from typing import Dict, Any, Iterator, Iterable
 from pyflakes import api as pyflakes_api
 from pyflakes.reporter import Reporter
 
-from pyserver.workspace import Workspace, Document, path_to_uri
+from pyserver import errors
+from pyserver.workspace import (
+    Document,
+    Workspace,
+    VersionedDocument,
+    uri_to_path,
+    path_to_uri,
+)
 
 
 @dataclass
@@ -112,3 +119,15 @@ class DiagnosticService:
             "version": self.params.version(),
             "diagnostics": list(self.build_items(diagnostics)),
         }
+
+
+def textdocument_publishdiagnostics(workspace: Workspace, params: dict):
+    try:
+        file_path = uri_to_path(params["textDocument"]["uri"])
+    except KeyError as err:
+        raise errors.InvalidParams(f"invalid params: {err}") from err
+
+    with VersionedDocument(workspace.get_document(file_path)) as document:
+        params = DiagnosticParams(document)
+        service = DiagnosticService(params)
+        return service.get_result()

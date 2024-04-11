@@ -6,7 +6,13 @@ from typing import Dict, Any, List
 import black
 
 from pyserver.services import diffutils
-from pyserver.workspace import Document
+from pyserver import errors
+from pyserver.workspace import (
+    Document,
+    Workspace,
+    VersionedDocument,
+    uri_to_path,
+)
 
 
 @dataclass
@@ -33,3 +39,15 @@ class FormattingService:
     def get_result(self) -> List[Dict[str, Any]]:
         formatted_str = self.execute()
         return diffutils.get_text_changes(self.params.text(), formatted_str)
+
+
+def textdocument_formatting(workspace: Workspace, params: dict) -> None:
+    try:
+        file_path = uri_to_path(params["textDocument"]["uri"])
+    except KeyError as err:
+        raise errors.InvalidParams(f"invalid params: {err}") from err
+
+    with VersionedDocument(workspace.get_document(file_path)) as document:
+        params = FormattingParams(document)
+        service = FormattingService(params)
+        return service.get_result()

@@ -6,7 +6,14 @@ from typing import List, Dict, Any
 from jedi import Script, Project
 from jedi.api.classes import Name
 
-from pyserver.workspace import Workspace, Document, path_to_uri
+from pyserver import errors
+from pyserver.workspace import (
+    Document,
+    Workspace,
+    VersionedDocument,
+    uri_to_path,
+    path_to_uri,
+)
 
 
 @dataclass
@@ -80,3 +87,17 @@ class DefinitionService:
         # transform as rpc
         result = list(self.build_items(candidates))
         return result
+
+
+def textdocument_definition(workspace: Workspace, params: dict) -> None:
+    try:
+        file_path = uri_to_path(params["textDocument"]["uri"])
+        line = params["position"]["line"]
+        character = params["position"]["character"]
+    except KeyError as err:
+        raise errors.InvalidParams(f"invalid params: {err}") from err
+
+    with VersionedDocument(workspace.get_document(file_path)) as document:
+        params = DefinitionParams(document, line, character)
+        service = DefinitionService(params)
+        return service.get_result()

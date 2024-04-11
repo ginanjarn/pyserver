@@ -10,9 +10,9 @@ if ver < (3, 8):
     print("Python >= 3.8 is required !!!", file=sys.stderr)
     sys.exit(1)
 
-from pyserver import handler
-from pyserver import server
-from pyserver import transport
+from pyserver.handler import LSPHandler
+from pyserver.server import LSPServer
+from pyserver.transport import StandardIO
 
 
 # logging format
@@ -39,6 +39,30 @@ LOGGER.addHandler(STREAM_HANDLER)
 LOGGER.addHandler(FILE_HANDLER)
 
 
+try:
+    from pyserver.services.completion import textdocument_completion
+    from pyserver.services.hover import textdocument_hover
+    from pyserver.services.definition import textdocument_definition
+    from pyserver.services.formatting import textdocument_formatting
+    from pyserver.services.diagnostics import textdocument_publishdiagnostics
+    from pyserver.services.prepare_rename import textdocument_preparerename
+    from pyserver.services.rename import textdocument_rename
+    from pyserver.services.signature_help import textdocument_signaturehelp
+
+except ImportError as err:
+    err_message = """\
+Error import required packages!
+
+Following required packages must be installed:
+- jedi
+- black
+- pyflakes
+
+"""
+    print(err_message, file=sys.stderr)
+    print("error:", repr(err), file=sys.stderr)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Python Language Server implementation"
@@ -56,7 +80,7 @@ def main():
     arguments = parser.parse_args()
 
     if arguments.stdin:
-        transport_ = transport.StandardIO()
+        transport_ = StandardIO()
     else:
         parser.print_help()
         sys.exit(1)
@@ -67,8 +91,20 @@ def main():
     if arguments.veryverbose:
         LOGGER.setLevel(logging.DEBUG)
 
-    handler_ = handler.LSPHandler()
-    srv = server.LSPServer(transport_, handler_)
+    handler_ = LSPHandler()
+    handler_.register_handlers(
+        {
+            "textDocument/completion": textdocument_completion,
+            "textDocument/hover": textdocument_hover,
+            "textDocument/definition": textdocument_definition,
+            "textDocument/formatting": textdocument_formatting,
+            "textDocument/publishDiagnostics": textdocument_publishdiagnostics,
+            "textDocument/prepareRename": textdocument_preparerename,
+            "textDocument/rename": textdocument_rename,
+            "textDocument/signatureHelp": textdocument_signaturehelp,
+        }
+    )
+    srv = LSPServer(transport_, handler_)
     srv.listen()
 
 

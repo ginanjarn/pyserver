@@ -6,7 +6,13 @@ from typing import List, Dict, Any
 from jedi import Script, Project
 from jedi.api.classes import Signature
 
-from pyserver.workspace import Document, Workspace
+from pyserver import errors
+from pyserver.workspace import (
+    Document,
+    Workspace,
+    VersionedDocument,
+    uri_to_path,
+)
 
 
 @dataclass
@@ -83,3 +89,17 @@ class SignatureHelpService:
             "activeParameters": 0,
         }
         return result
+
+
+def textdocument_signaturehelp(workspace: Workspace, params: dict) -> None:
+    try:
+        file_path = uri_to_path(params["textDocument"]["uri"])
+        line = params["position"]["line"]
+        character = params["position"]["character"]
+    except KeyError as err:
+        raise errors.InvalidParams(f"invalid params: {err}") from err
+
+    with VersionedDocument(workspace.get_document(file_path)) as document:
+        params = SignatureHelpParams(document, line, character)
+        service = SignatureHelpService(params)
+        return service.get_result()

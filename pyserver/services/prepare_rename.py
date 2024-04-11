@@ -5,7 +5,13 @@ from typing import Dict, Any, Optional
 
 from jedi import Script, Project
 
-from pyserver.workspace import Document, Workspace
+from pyserver import errors
+from pyserver.workspace import (
+    Document,
+    Workspace,
+    VersionedDocument,
+    uri_to_path,
+)
 
 
 @dataclass
@@ -90,3 +96,17 @@ class PrepareRenameService:
             },
             "placeholder": candidate.text,
         }
+
+
+def textdocument_preparerename(workspace: Workspace, params: dict) -> None:
+    try:
+        file_path = uri_to_path(params["textDocument"]["uri"])
+        line = params["position"]["line"]
+        character = params["position"]["character"]
+    except KeyError as err:
+        raise errors.InvalidParams(f"invalid params: {err}") from err
+
+    with VersionedDocument(workspace.get_document(file_path)) as document:
+        params = PrepareRenameParams(document, line, character)
+        service = PrepareRenameService(params)
+        return service.get_result()

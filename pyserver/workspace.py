@@ -2,6 +2,7 @@
 
 __all__ = ["DocumentURI", "Document", "Workspace", "path_to_uri", "uri_to_path"]
 
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict
@@ -135,3 +136,22 @@ class Workspace:
             return self.documents[file_path]
         except KeyError as err:
             raise errors.InvalidResource(f"{file_path!r} not opened") from err
+
+
+@contextmanager
+def VersionedDocument(document: Document):
+    """VersionedDocument check version changes pre and post execution.
+
+    Raises ContentModified if version is changed.
+    """
+    try:
+        pre_version = document.version
+        yield document
+
+    finally:
+        post_version = document.version
+        # check version changes
+        if pre_version != post_version:
+            raise errors.ContentModified(
+                f"version changed. want:{pre_version}, expected:{post_version}"
+            )

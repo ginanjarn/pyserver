@@ -7,7 +7,13 @@ from typing import List, Dict, Any
 from jedi import Script, Project
 from jedi.api.classes import Completion
 
-from pyserver.workspace import Document, Workspace
+from pyserver import errors
+from pyserver.workspace import (
+    Document,
+    Workspace,
+    VersionedDocument,
+    uri_to_path,
+)
 
 
 @dataclass
@@ -168,3 +174,17 @@ class CompletionService:
             "items": self.build_items(candidates),
         }
         return result
+
+
+def textdocument_completion(workspace: Workspace, params: dict) -> None:
+    try:
+        file_path = uri_to_path(params["textDocument"]["uri"])
+        line = params["position"]["line"]
+        character = params["position"]["character"]
+    except KeyError as err:
+        raise errors.InvalidParams(f"invalid params: {err}") from err
+
+    with VersionedDocument(workspace.get_document(file_path)) as document:
+        params = CompletionParams(document, line, character)
+        service = CompletionService(params)
+        return service.get_result()

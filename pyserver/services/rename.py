@@ -7,8 +7,14 @@ from jedi import Script, Project
 from jedi.api.refactoring import Refactoring, RefactoringError
 
 from pyserver import errors
-from pyserver.workspace import Workspace, Document, path_to_uri
 from pyserver.services import diffutils
+from pyserver.workspace import (
+    Document,
+    Workspace,
+    VersionedDocument,
+    uri_to_path,
+    path_to_uri,
+)
 
 
 @dataclass
@@ -86,3 +92,18 @@ class RenameService:
     def get_result(self) -> Dict[str, Any]:
         refactored = self.execute()
         return {"documentChanges": list(self.build_item(refactored))}
+
+
+def textdocument_rename(workspace: Workspace, params: dict) -> None:
+    try:
+        file_path = uri_to_path(params["textDocument"]["uri"])
+        line = params["position"]["line"]
+        character = params["position"]["character"]
+        new_name = params["newName"]
+    except KeyError as err:
+        raise errors.InvalidParams(f"invalid params: {err}") from err
+
+    with VersionedDocument(workspace.get_document(file_path)) as document:
+        params = RenameParams(document, line, character, new_name)
+        service = RenameService(params)
+        return service.get_result()
