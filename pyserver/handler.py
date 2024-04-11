@@ -17,6 +17,7 @@ try:
     from pyserver.services import diagnostics
     from pyserver.services import prepare_rename
     from pyserver.services import rename
+    from pyserver.services import signature_help
 
 except ImportError as err:
     message = """\
@@ -283,4 +284,18 @@ class LSPHandler(Handler):
         with VersionedDocument(self.workspace.get_document(file_path)) as document:
             params = rename.RenameParams(document, line, character, new_name)
             service = rename.RenameService(params)
+            return service.get_result()
+
+    @session.ready
+    def textdocument_signaturehelp(self, params: dict) -> None:
+        try:
+            file_path = uri_to_path(params["textDocument"]["uri"])
+            line = params["position"]["line"]
+            character = params["position"]["character"]
+        except KeyError as err:
+            raise errors.InvalidParams(f"invalid params: {err}") from err
+
+        with VersionedDocument(self.workspace.get_document(file_path)) as document:
+            params = signature_help.SignatureHelpParams(document, line, character)
+            service = signature_help.SignatureHelpService(params)
             return service.get_result()
