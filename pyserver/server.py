@@ -7,7 +7,7 @@ from collections import namedtuple
 from typing import Optional, Any, Callable
 
 from pyserver import errors
-from pyserver.handler import BaseHandler
+from pyserver.handler import Handler
 from pyserver.message import RPCMessage
 from pyserver.transport import Transport
 
@@ -82,7 +82,7 @@ class RequestHandler:
 class LSPServer:
     """LSP server"""
 
-    def __init__(self, transport: Transport, handler: BaseHandler, /):
+    def __init__(self, transport: Transport, handler: Handler, /):
         self.transport = transport
         self.request_id = 0
         self.request_map = {}

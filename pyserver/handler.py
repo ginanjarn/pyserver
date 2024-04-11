@@ -1,6 +1,7 @@
 """command handler"""
 
 import sys
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from functools import wraps, lru_cache
 
@@ -32,27 +33,12 @@ Following required packages must be installed:
     sys.exit(1)
 
 
-class BaseHandler:
+class Handler(ABC):
     """base handler"""
 
-    @staticmethod
-    @lru_cache(maxsize=128)
-    def normalize_method(method: str) -> str:
-        """normalize method to identifier name
-        * replace "/" with "_"
-        * replace "$" with "s"
-        * convert to lower case
-        """
-        return method.replace("/", "_").replace("$", "s").lower()
-
+    @abstractmethod
     def handle(self, method: str, params: dict):
-        try:
-            func = getattr(self, self.normalize_method(method))
-        except AttributeError as err:
-            raise errors.MethodNotFound(f"method not found {method!r}") from err
-
-        # exec function
-        return func(params)
+        """handle message"""
 
 
 class SessionManager:
@@ -108,7 +94,7 @@ def VersionedDocument(document: Document):
             )
 
 
-class LSPHandler(BaseHandler):
+class LSPHandler(Handler):
     """LSPHandler implementation"""
 
     # session manager
@@ -116,6 +102,25 @@ class LSPHandler(BaseHandler):
 
     def __init__(self):
         self.workspace = None
+
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def normalize_method(method: str) -> str:
+        """normalize method to identifier name
+        * replace "/" with "_"
+        * replace "$" with "s"
+        * convert to lower case
+        """
+        return method.replace("/", "_").replace("$", "s").lower()
+
+    def handle(self, method: str, params: dict):
+        try:
+            func = getattr(self, self.normalize_method(method))
+        except AttributeError as err:
+            raise errors.MethodNotFound(f"method not found {method!r}") from err
+
+        # exec function
+        return func(params)
 
     def initialized(self, params: dict) -> None:
         if not self.workspace:
