@@ -59,7 +59,9 @@ class PyflakesDiagnostic:
         error_buffer = StringIO()
         reporter = Reporter(warning_buffer, error_buffer)
 
-        pyflakes_api.check(self.text, self.file_name, reporter)
+        n_report = pyflakes_api.check(self.text, self.file_name, reporter)
+        if not n_report:
+            return
 
         yield from self.parse_report(KIND_ERROR, error_buffer)
         yield from self.parse_report(KIND_WARNING, warning_buffer)
