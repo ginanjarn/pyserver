@@ -1,5 +1,6 @@
 """formatting service"""
 
+import sys
 from dataclasses import dataclass
 from typing import Dict, Any, List
 
@@ -31,8 +32,14 @@ class FormattingService:
         text = self.params.text()
         try:
             new_str = black.format_str(text, mode=black.FileMode())
+
         except black.NothingChanged:
             return text
+
+        except Exception as err:
+            print(err, file=sys.stderr)
+            return text
+
         else:
             return new_str
 
