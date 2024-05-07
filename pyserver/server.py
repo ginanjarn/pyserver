@@ -28,17 +28,25 @@ class RequestHandler:
         self.request_queue = queue.Queue()
         self.canceled_requests = set()
 
+        self.queue_lock = threading.Lock()
         self.cancel_lock = threading.Lock()
 
         self.exec_callback = exec_callback
         self.response_callback = response_callback
 
     def add(self, request_id, method, params):
-        self.request_queue.put(RequestData(request_id, method, params))
+        with self.queue_lock:
+            self.request_queue.put(RequestData(request_id, method, params))
 
     def cancel(self, request_id: int):
         with self.cancel_lock:
             self.canceled_requests.add(request_id)
+
+    def cancel_all(self):
+        with self.queue_lock:
+            while not self.request_queue.empty():
+                req = self.request_queue.get()
+                self.cancel(req.id_)
 
     def check_canceled(self, request_id: int):
         # 'canceled_requests' data may be changed during iteration
@@ -202,6 +210,8 @@ class LSPServer:
             "textDocument/didOpen",
             "textDocument/didChange",
         }:
+            # cancel all current request
+            self.request_handler.cancel_all()
             # publish diagnostics
             threading.Thread(target=self._publish_diagnostics, args=(params,)).start()
 
