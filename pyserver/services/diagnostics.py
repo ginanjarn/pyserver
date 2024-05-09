@@ -1,7 +1,6 @@
 """completion service"""
 
 import re
-from collections import namedtuple
 from dataclasses import dataclass
 from io import StringIO
 from typing import Dict, Any, Iterator, Iterable
@@ -40,9 +39,14 @@ KIND_ERROR = 1
 KIND_WARNING = 2
 
 
-Diagnostic = namedtuple(
-    "Diagnostic", ["severity", "file_name", "line", "column", "message", "source"]
-)
+@dataclass
+class Diagnostic:
+    severity: int
+    file_name: str
+    line: int
+    column: int
+    message: str
+    source: str
 
 
 class PyflakesDiagnostic:

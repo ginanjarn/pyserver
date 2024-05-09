@@ -3,7 +3,7 @@
 import logging
 import queue
 import threading
-from collections import namedtuple
+from dataclasses import dataclass
 from typing import Optional, Any, Callable
 
 from pyserver import errors
@@ -14,7 +14,11 @@ from pyserver.transport import Transport
 LOGGER = logging.getLogger("pyserver")
 
 
-RequestData = namedtuple("RequestData", ["id_", "method", "params"])
+@dataclass
+class RequestData:
+    id_: int
+    method: str
+    params: dict
 
 
 class RequestHandler:
