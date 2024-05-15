@@ -2,10 +2,11 @@
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from jedi import Script, Project
 from jedi.api.classes import Completion
+from parso.tree import Leaf
 
 from pyserver import errors
 from pyserver.workspace import (
@@ -51,14 +52,13 @@ class CompletionService:
         self.text_edit_range = self._get_replaced_text_range()
 
     def execute(self) -> List[Completion]:
-        if not self.fetch_completion():
+        if not self.fetch_completion(self.leaf):
             return []
 
         row, col = self.params.jedi_rowcol()
         return self.script.complete(row, col)
 
-    def fetch_completion(self) -> bool:
-        leaf = self.leaf
+    def fetch_completion(self, leaf: Optional[Leaf]) -> bool:
         if not leaf:
             return True
 
@@ -67,10 +67,10 @@ class CompletionService:
         if ltype in {"string", "fstring_string", "number"}:
             return False
 
-        # closing scope operator
-        close_operator = ":)]}"
+        # closing operator
+        closing_operator = {":", ")", "]", "}"}
 
-        if leaf.value in close_operator:
+        if leaf.value in closing_operator:
             return False
 
         if ltype in {"endmarker", "newline"}:
@@ -78,12 +78,12 @@ class CompletionService:
             if not prev:
                 return False
 
-            # after keyword eg: 'import', 'from' etc
+            # after keyword eg: 'import <cursor>'
             if prev.type == "keyword":
                 return True
 
-            # after close scope
-            if prev.value in close_operator:
+            # after closing operator eg: 'def fn()<cursor>'
+            if prev.value in closing_operator:
                 return False
 
             return True
@@ -124,9 +124,12 @@ class CompletionService:
         def build_item(completion: Completion):
             text = completion.name
             signature = ""
+            insert_text = text
 
             try:
                 type_name = completion.type
+                if type_name == "function":
+                    insert_text = text + "(${0})"
 
                 # only show signature for class and function
                 if type_name in {"class", "function"}:
@@ -148,7 +151,7 @@ class CompletionService:
                 "insertTextFormat": 1,  # insert format = text
                 "textEdit": {
                     "range": self.text_edit_range,
-                    "newText": text,
+                    "newText": insert_text,
                 },
             }
 
