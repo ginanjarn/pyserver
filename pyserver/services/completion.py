@@ -50,6 +50,7 @@ class CompletionService:
             self.params.jedi_rowcol()
         )
         self.text_edit_range = self._get_replaced_text_range()
+        self.append_bracket = self._can_append_bracket(self.leaf)
 
     def execute(self) -> List[Completion]:
         if not self.fetch_completion(self.leaf):
@@ -87,6 +88,17 @@ class CompletionService:
                 return False
 
             return True
+
+        return True
+
+    def _can_append_bracket(self, leaf: Leaf) -> bool:
+        if parent := leaf.parent:
+            if parent.type.startswith("import"):
+                return False
+
+        if next_leaf := leaf.get_next_leaf():
+            if next_leaf.type == "operator" and next_leaf.value == "(":
+                return False
 
         return True
 
@@ -128,7 +140,7 @@ class CompletionService:
 
             try:
                 type_name = completion.type
-                if type_name == "function":
+                if type_name == "function" and self.append_bracket:
                     insert_text = text + "(${0})"
 
                 # only show signature for class and function
