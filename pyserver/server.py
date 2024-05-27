@@ -103,8 +103,6 @@ class LSPServer:
         self.handler = handler
         self.request_handler = RequestHandler(self.handler.handle, self.send_response)
 
-        self._diagnostics_lock = threading.Lock()
-
     def new_request_id(self):
         self.request_id += 1
         return self.request_id
@@ -172,28 +170,26 @@ class LSPServer:
                 )
 
     def _publish_diagnostics(self, params: dict):
-        if self._diagnostics_lock.locked():
-            return
+        try:
+            diagnostics_params = self.handler.handle(
+                "textDocument/publishDiagnostics", params
+            )
 
-        with self._diagnostics_lock:
-            try:
-                diagnostics_params = self.handler.handle(
-                    "textDocument/publishDiagnostics", params
-                )
-                self.send_notification(
-                    "textDocument/publishDiagnostics", diagnostics_params
-                )
+        except errors.ContentModified:
+            # ignore document modified
+            pass
+        except errors.InvalidResource:
+            # ignore document which not in project
+            pass
+        except errors.FeatureDisabled:
+            LOGGER.info("feature disabled")
+        except Exception as err:
+            LOGGER.error(err, exc_info=True)
 
-            except errors.ContentModified:
-                # ignore document modified
-                pass
-            except errors.InvalidResource:
-                # ignore document which not in project
-                pass
-            except errors.FeatureDisabled:
-                LOGGER.info("feature disabled")
-            except Exception as err:
-                LOGGER.error(err, exc_info=True)
+        else:
+            self.send_notification(
+                "textDocument/publishDiagnostics", diagnostics_params
+            )
 
     def exec_notification(self, method, params):
         if method == "exit":
@@ -217,7 +213,7 @@ class LSPServer:
             # cancel all current request
             self.request_handler.cancel_all()
             # publish diagnostics
-            threading.Thread(target=self._publish_diagnostics, args=(params,)).start()
+            self._publish_diagnostics(params)
 
     def exec_response(self, response: dict):
         message_id = response["id"]
