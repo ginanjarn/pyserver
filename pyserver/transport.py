@@ -89,11 +89,7 @@ class StandardIO(Transport):
         if not n_header:
             raise EOFError("stdin closed")
 
-        try:
-            content_length = get_content_length(temp_header.getvalue())
-
-        except HeaderError as err:
-            raise err
+        content_length = get_content_length(temp_header.getvalue())
 
         temp_content = BytesIO()
         n_content = 0

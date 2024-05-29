@@ -69,9 +69,10 @@ class RequestHandler:
             self.check_canceled(request.id_)
 
         except (
+            errors.InvalidParams,
             errors.ContentModified,
             errors.RequestCanceled,
-            errors.FeatureDisabled,
+            errors.MethodNotFound,
         ) as err:
             error = err
 
@@ -163,6 +164,7 @@ class LSPServer:
 
             try:
                 self.exec_message(message)
+
             except Exception as err:
                 LOGGER.error(err, exc_info=True)
                 self.send_notification(
@@ -175,14 +177,15 @@ class LSPServer:
                 "textDocument/publishDiagnostics", params
             )
 
-        except errors.ContentModified:
-            # ignore document modified
+        except (
+            errors.InvalidParams,
+            errors.ContentModified,
+            errors.InvalidResource,
+            errors.MethodNotFound,
+        ):
+            # ignore above exception
             pass
-        except errors.InvalidResource:
-            # ignore document which not in project
-            pass
-        except errors.FeatureDisabled:
-            LOGGER.info("feature disabled")
+
         except Exception as err:
             LOGGER.error(err, exc_info=True)
 
@@ -200,11 +203,7 @@ class LSPServer:
             self.request_handler.cancel(params["id"])
             return
 
-        try:
-            self.handler.handle(method, params)
-        except Exception as err:
-            LOGGER.error(err, exc_info=True)
-            raise err
+        self.handler.handle(method, params)
 
         if method in {
             "textDocument/didOpen",
