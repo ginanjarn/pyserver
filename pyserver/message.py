@@ -3,6 +3,7 @@
 __all__ = ["RPCMessage"]
 
 import json
+from typing import Any, Optional
 from pyserver.errors import ParseError
 
 
@@ -12,30 +13,41 @@ class RPCMessage:
     JSONRPC_VERSION = "2.0"
     CONTENT_ENCODING = "utf-8"
 
-    def __init__(self, message: dict):
-        if not isinstance(message, dict):
+    __slots__ = ["data"]
+
+    def __init__(self, data: dict):
+        if not isinstance(data, dict):
             raise TypeError("message type must <class 'dict'>")
 
-        self.message = message
+        self.data = data
         # set jsonrpc version
-        self.message["jsonrpc"] = self.JSONRPC_VERSION
+        self.data["jsonrpc"] = self.JSONRPC_VERSION
 
     def __repr__(self):
-        return f"RPCMessage({self.message})"
+        return f"RPCMessage({self.data})"
 
-    def get(self, key: str):
-        return self.message.get(key)
+    def get(self, key: str) -> None:
+        """get data
 
-    def set(self, key, value):
-        self.message.set(key, value)
+        Returns:
+            Any data or None if key not found
+        """
+        return self.data.get(key)
+
+    def set(self, key: str, value: Any):
+        self.data.set(key, value)
 
     def to_bytes(self) -> bytes:
-        message_str = json.dumps(self.message)
+        """serialize data to bytes"""
+
+        message_str = json.dumps(self.data)
         message_encoded = message_str.encode(self.CONTENT_ENCODING)
         return message_encoded
 
     @classmethod
     def from_bytes(cls, b: bytes, /):
+        """create from bytes"""
+
         try:
             message_str = b.decode(cls.CONTENT_ENCODING)
             message = json.loads(message_str)
@@ -49,15 +61,20 @@ class RPCMessage:
             return cls(message)
 
     @classmethod
-    def notification(cls, method, params):
+    def notification(cls, method: str, params: Any):
+        """create notification message"""
         return cls({"method": method, "params": params})
 
     @classmethod
-    def request(cls, id_, method, params):
+    def request(cls, id_: int, method: str, params: Any):
+        """create request message"""
         return cls({"id": id_, "method": method, "params": params})
 
     @classmethod
-    def response(cls, id_, result=None, error=None):
+    def response(
+        cls, id_: int, result: Optional[dict] = None, error: Optional[dict] = None
+    ):
+        """create response message"""
         if error:
             return cls({"id": id_, "error": error})
         return cls({"id": id_, "result": result})
