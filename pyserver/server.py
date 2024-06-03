@@ -32,25 +32,24 @@ class RequestHandler:
         self.request_queue = queue.Queue()
         self.canceled_requests = set()
 
-        self.queue_lock = threading.Lock()
         self.cancel_lock = threading.Lock()
+
+        self.current_id = -1
+        self.expired_id = -1
 
         self.exec_callback = exec_callback
         self.response_callback = response_callback
 
     def add(self, request_id, method, params):
-        with self.queue_lock:
-            self.request_queue.put(RequestData(request_id, method, params))
+        self.current_id = request_id
+        self.request_queue.put(RequestData(request_id, method, params))
 
     def cancel(self, request_id: int):
         with self.cancel_lock:
             self.canceled_requests.add(request_id)
 
     def cancel_all(self):
-        with self.queue_lock:
-            while not self.request_queue.empty():
-                req = self.request_queue.get()
-                self.cancel(req.id_)
+        self.expired_id = self.current_id
 
     def check_canceled(self, request_id: int):
         # 'canceled_requests' data may be changed during iteration
@@ -58,6 +57,9 @@ class RequestHandler:
             if request_id in self.canceled_requests:
                 self.canceled_requests.remove(request_id)
                 raise errors.RequestCanceled(f'request canceled "{request_id}"')
+
+        if request_id <= self.expired_id:
+            raise errors.RequestCanceled(f'request canceled "{request_id}"')
 
     def execute(self, request: RequestData):
         result, error = None, None
