@@ -99,12 +99,15 @@ class LSPServer:
 
     def __init__(self, transport: Transport, handler: Handler, /):
         self.transport = transport
+        self.handler = handler
+
+        # client request handler
+        self.request_handler = RequestHandler(self.handler.handle, self.send_response)
+
+        # server requests
         self.request_id = 0
         self.request_map = {}
         self.canceled_requests = set()
-
-        self.handler = handler
-        self.request_handler = RequestHandler(self.handler.handle, self.send_response)
 
     def new_request_id(self):
         self.request_id += 1
@@ -230,7 +233,7 @@ class LSPServer:
                 return
 
         except KeyError:
-            LOGGER.info(f"invalid response {message_id}")
+            LOGGER.info("invalid response (%d)", message_id)
         else:
             self.handler.handle(method, response)
 
@@ -259,6 +262,6 @@ class LSPServer:
 
         elif message_id is not None:
             LOGGER.info("Handle response (%d)", message_id)
-            self.exec_response(message)
+            self.exec_response(message.data)
         else:
-            LOGGER.error(f"invalid message: {message}")
+            LOGGER.error("invalid message: '%s'", message)
