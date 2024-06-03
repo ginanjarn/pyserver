@@ -25,25 +25,23 @@ class SessionManager:
     """
 
     def __init__(self):
-        self.initialized = False
-        self._request_shutdown = False
+        self.is_initialized = False
+        self.is_shuttingdown = False
 
     def initialize(self):
-        self.initialized = True
+        self.is_initialized = True
+        self.is_shuttingdown = False
 
     def shutdown(self):
-        self._request_shutdown = True
+        self.is_shuttingdown = True
 
-    def ready(self, func):
-        """check if session is ready"""
+    def must_initialized(self, func):
+        """check if session is initialized"""
 
         @wraps(func)
         def wrapper(*args, **kwargs):
-            if not self.initialized:
+            if not self.is_initialized:
                 raise errors.ServerNotInitialized
-
-            if self._request_shutdown:
-                raise errors.InvalidRequest("waiting 'exit' command")
 
             return func(*args, **kwargs)
 
@@ -78,20 +76,23 @@ class LSPHandler(Handler):
         self._extension_handler_map.update(mapping)
 
     def handle(self, method: str, params: dict):
-        if internal_func := self._internal_handler_map.get(method):
-            func = internal_func
+        if self.session.is_shuttingdown:
+            raise errors.InvalidRequest("shutting down, 'exit' command required")
 
-        else:
-            try:
-                func = self._extension_handler_map[method]
+        # builtin handler
+        if func := self._internal_handler_map.get(method):
+            return func(self.workspace, params)
 
-            except KeyError as err:
-                raise errors.MethodNotFound(f"method not found {method!r}") from err
-            else:
-                if not self.session.initialized:
-                    raise errors.ServerNotInitialized
+        # external handler must initialized
+        if not self.session.is_initialized:
+            raise errors.ServerNotInitialized("not initialized")
 
-        # exec function
+        try:
+            func = self._extension_handler_map[method]
+        except KeyError as err:
+            raise errors.MethodNotFound(f"method not found {method!r}") from err
+
+        # external handler
         return func(self.workspace, params)
 
     def initialized(self, workspace: Workspace, params: dict) -> None:
@@ -101,13 +102,13 @@ class LSPHandler(Handler):
         self.session.initialize()
         return None
 
-    @session.ready
+    @session.must_initialized
     def shutdown(self, workspace: Workspace, params: dict) -> None:
         self.session.shutdown()
         return None
 
     def initialize(self, workspace: Workspace, params: dict) -> dict:
-        if self.session.initialized:
+        if self.session.is_initialized:
             raise errors.ServerNotInitialized
 
         try:
@@ -124,7 +125,7 @@ class LSPHandler(Handler):
 
         return {}
 
-    @session.ready
+    @session.must_initialized
     def textdocument_didopen(self, workspace: Workspace, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
@@ -137,11 +138,11 @@ class LSPHandler(Handler):
 
         self.workspace.add_document(file_path, language_id, version, text)
 
-    @session.ready
+    @session.must_initialized
     def textdocument_didsave(self, workspace: Workspace, params: dict) -> None:
         pass
 
-    @session.ready
+    @session.must_initialized
     def textdocument_didclose(self, workspace: Workspace, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
@@ -150,7 +151,7 @@ class LSPHandler(Handler):
 
         self.workspace.remove_document(file_path)
 
-    @session.ready
+    @session.must_initialized
     def textdocument_didchange(self, workspace: Workspace, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
