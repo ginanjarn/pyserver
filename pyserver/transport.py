@@ -56,51 +56,30 @@ class StandardIO(Transport):
         # just wait until terminated
         pass
 
-    @property
-    def stdin(self):
-        return sys.stdin.buffer
-
-    @property
-    def stdout(self):
-        return sys.stdout.buffer
-
     def terminate(self):
         """terminate"""
         sys.exit(0)
 
     def write(self, data: bytes):
         prepared_data = wrap_rpc(data)
-        self.stdout.write(prepared_data)
-        self.stdout.flush()
+        sys.stdout.buffer.write(prepared_data)
+        sys.stdout.buffer.flush()
 
     def read(self):
         # get header
-        temp_header = BytesIO()
-        n_header = 0
-        while line := self.stdin.readline():
+        headers_buffer = BytesIO()
+        while line := sys.stdin.buffer.readline():
             # header and content separated by newline with \r\n
             if line == b"\r\n":
                 break
 
-            n = temp_header.write(line)
-            n_header += n
+            headers_buffer.write(line)
 
         # no header received
-        if not n_header:
+        if not headers_buffer.getvalue():
             raise EOFError("stdin closed")
 
-        content_length = get_content_length(temp_header.getvalue())
+        content_length = get_content_length(headers_buffer.getvalue())
 
-        temp_content = BytesIO()
-        n_content = 0
-        # Read until defined content_length received.
-        while n_content < content_length:
-            unread_length = content_length - n_content
-            if chunk := self.stdin.read(unread_length):
-                n = temp_content.write(chunk)
-                n_content += n
-            else:
-                raise EOFError("stdin closed")
-
-        content = temp_content.getvalue()
-        return content
+        # the read() function will block until specified content_length satisfied
+        return sys.stdin.buffer.read(content_length)
