@@ -91,7 +91,10 @@ class CompletionService:
 
         return True
 
-    def _can_append_bracket(self, leaf: Leaf) -> bool:
+    def _can_append_bracket(self, leaf: Optional[Leaf]) -> bool:
+        if not leaf:
+            return False
+
         if parent := leaf.parent:
             if parent.type.startswith("import"):
                 return False
