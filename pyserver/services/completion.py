@@ -50,7 +50,7 @@ class CompletionService:
             self.params.jedi_rowcol()
         )
         self.text_edit_range = self._get_replaced_text_range()
-        self.append_bracket = self._can_append_bracket(self.leaf)
+        self.is_append_bracket = self._check_can_append_bracket(self.leaf)
 
     def execute(self) -> List[Completion]:
         if not self.fetch_completion(self.leaf):
@@ -91,16 +91,22 @@ class CompletionService:
 
         return True
 
-    def _can_append_bracket(self, leaf: Optional[Leaf]) -> bool:
+    def _check_can_append_bracket(self, leaf: Optional[Leaf]) -> bool:
+        trigger_line = self.script._code_lines[self.params.line].strip()
+        if any(
+            [
+                trigger_line.startswith("@"),  # decorator
+                trigger_line.startswith("import"),  # import
+                trigger_line.startswith("from"),  # from .. import
+            ]
+        ):
+            return False
+
         if not leaf:
             return False
 
-        if parent := leaf.parent:
-            if parent.type.startswith("import"):
-                return False
-
         if next_leaf := leaf.get_next_leaf():
-            if next_leaf.type == "operator" and next_leaf.value == "(":
+            if next_leaf.value == "(":
                 return False
 
         return True
@@ -143,8 +149,8 @@ class CompletionService:
 
             try:
                 type_name = completion.type
-                if type_name == "function" and self.append_bracket:
-                    insert_text = text + "(${0})"
+                if type_name == "function" and self.is_append_bracket:
+                    insert_text = f"{text}(${{0}})"
 
                 # only show signature for class and function
                 if type_name in {"class", "function"}:
