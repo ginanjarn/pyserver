@@ -35,7 +35,7 @@ class RequestHandler:
         self.cancel_lock = threading.Lock()
 
         self.current_id = -1
-        self.expired_id = -1
+        self.in_process_id = -1
 
         self.exec_callback = exec_callback
         self.response_callback = response_callback
@@ -49,17 +49,16 @@ class RequestHandler:
             self.canceled_requests.add(request_id)
 
     def cancel_all(self):
-        self.expired_id = self.current_id
+        with self.cancel_lock:
+            self.canceled_requests.update(
+                range(self.in_process_id, self.current_id + 1)
+            )
 
     def check_canceled(self, request_id: int):
         # 'canceled_requests' data may be changed during iteration
         with self.cancel_lock:
             if request_id in self.canceled_requests:
-                self.canceled_requests.remove(request_id)
                 raise errors.RequestCanceled(f'request canceled "{request_id}"')
-
-        if request_id <= self.expired_id:
-            raise errors.RequestCanceled(f'request canceled "{request_id}"')
 
     def execute(self, request: RequestData):
         result, error = None, None
@@ -67,13 +66,17 @@ class RequestHandler:
         try:
             # Check request cancelation before and after exec command
             self.check_canceled(request.id_)
+            self.in_process_id = request.id_
             result = self.exec_callback(request.method, request.params)
             self.check_canceled(request.id_)
+
+        except errors.RequestCanceled as err:
+            self.canceled_requests.remove(request.id_)
+            error = err
 
         except (
             errors.InvalidParams,
             errors.ContentModified,
-            errors.RequestCanceled,
             errors.MethodNotFound,
         ) as err:
             error = err
