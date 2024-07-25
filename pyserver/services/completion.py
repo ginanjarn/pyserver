@@ -53,19 +53,21 @@ class CompletionService:
         self.is_append_bracket = self._check_can_append_bracket(self.leaf)
 
     def execute(self) -> List[Completion]:
-        if not self.fetch_completion(self.leaf):
+        if not self.can_fetch_completion():
             return []
 
         row, col = self.params.jedi_rowcol()
         return self.script.complete(row, col)
 
-    def fetch_completion(self, leaf: Optional[Leaf]) -> bool:
+    def can_fetch_completion(self) -> bool:
+        leaf = self.leaf
+
         if not leaf:
             return True
 
-        ltype = leaf.type
+        leaf_type = leaf.type
 
-        if ltype in {"string", "fstring_string", "number"}:
+        if leaf_type in {"string", "fstring_string", "number"}:
             return False
 
         # closing operator
@@ -74,7 +76,7 @@ class CompletionService:
         if leaf.value in closing_operator:
             return False
 
-        if ltype in {"endmarker", "newline"}:
+        if leaf_type in {"endmarker", "newline"}:
             prev = leaf.get_previous_leaf()
             if not prev:
                 return False
@@ -92,7 +94,7 @@ class CompletionService:
         return True
 
     def _check_can_append_bracket(self, leaf: Optional[Leaf]) -> bool:
-        trigger_line = self.script._code_lines[self.params.line].strip()
+        trigger_line = self.script._code_lines[self.params.line].lstrip()
         if any(
             [
                 trigger_line.startswith("@"),  # decorator
@@ -146,25 +148,34 @@ class CompletionService:
             text = completion.name
             signature = ""
             insert_text = text
+            completion_type = None
 
             try:
-                type_name = completion.type
-                if type_name == "function" and self.is_append_bracket:
-                    insert_text = f"{text}(${{0}})"
-
-                # only show signature for class and function
-                if type_name in {"class", "function"}:
-                    if signatures := completion._get_signatures(for_docstring=True):
-                        # get first signature
-                        signature = signatures[0].to_string()
-
+                completion_type = completion.type
             except Exception:
-                type_name = None
+                pass
+
+            if (
+                self.is_append_bracket
+                and bool(completion_type)
+                and completion_type == "function"
+            ):
+                insert_text = f"{text}(${{0}})"
+
+            # only show signature for class and function
+            if completion_type in {"class", "function"}:
+                try:
+                    signatures = completion._get_signatures(for_docstring=True)
+                except Exception:
+                    pass
+
+                if signatures:
+                    signature = signatures[0].to_string()
 
             item = {
                 "label": text,
                 "labelDetails": {},
-                "kind": self.kind_map[type_name],
+                "kind": self.kind_map[completion_type],
                 "preselect": False,
                 "sortText": text,
                 "filterText": text,
