@@ -38,6 +38,7 @@ LOGGER = logging.getLogger("pyserver")
 LOGGER.addHandler(STREAM_HANDLER)
 LOGGER.addHandler(FILE_HANDLER)
 
+__version__ = "0.1.0"
 
 try:
     from pyserver.services.completion import textdocument_completion
@@ -65,7 +66,8 @@ Following required packages must be installed:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Python Language Server implementation"
+        usage="python -m pyserver [options]",
+        description="Python Language Server implementation",
     )
     parser.add_argument(
         "-i",
@@ -74,10 +76,14 @@ def main():
         help="communicate through standard input",
     )
 
-    parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-vv", "--veryverbose", action="store_true")
+    parser.add_argument("-v", "--version", action="store_true", help="print version")
+    parser.add_argument("--verbose", action="store_true", help="verbose logging")
 
     arguments = parser.parse_args()
+
+    if arguments.version:
+        print("version", __version__)
+        sys.exit(0)
 
     if arguments.stdin:
         transport_ = StandardIO()
@@ -86,9 +92,6 @@ def main():
         sys.exit(1)
 
     if arguments.verbose:
-        LOGGER.setLevel(logging.INFO)
-
-    if arguments.veryverbose:
         LOGGER.setLevel(logging.DEBUG)
 
     handler_ = LSPHandler()
