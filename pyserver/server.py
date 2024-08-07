@@ -97,6 +97,35 @@ class RequestHandler:
         thread.start()
 
 
+class ServerRequestManager:
+    """Manage server request"""
+
+    def __init__(self):
+        self.request_id = -1
+        self.method = ""
+
+    def is_waiting_response(self) -> bool:
+        """"""
+        return bool(self.method)
+
+    def add_method(self, method: str) -> int:
+        """return request id for added method"""
+
+        self.method = method
+        self.request_id += 1
+        return self.request_id
+
+    def get_method(self, message_id: int) -> str:
+        """get method for response id"""
+
+        if message_id != self.request_id:
+            raise ValueError(f"invalid response for request ({self.request_id})")
+
+        temp = self.method
+        self.method = ""
+        return temp
+
+
 class LSPServer:
     """LSP server"""
 
@@ -106,15 +135,7 @@ class LSPServer:
 
         # client request handler
         self.request_handler = RequestHandler(self.handler.handle, self.send_response)
-
-        # server requests
-        self.request_id = 0
-        self.request_map = {}
-        self.canceled_requests = set()
-
-    def new_request_id(self):
-        self.request_id += 1
-        return self.request_id
+        self.request_manager = ServerRequestManager()
 
     def send_message(self, message: RPCMessage):
         LOGGER.debug("Send >> %s", message)
@@ -122,18 +143,8 @@ class LSPServer:
         self.transport.write(content)
 
     def send_request(self, method: str, params: Any):
-        # cancel all previous request
-        for req_id, req_method in self.request_map.items():
-            if req_method == method:
-                self.cancel_request(req_id)
-
-        request_id = self.new_request_id()
-        self.request_map[request_id] = method
+        request_id = self.request_manager.add_method(method)
         self.send_message(RPCMessage.request(request_id, method, params))
-
-    def cancel_request(self, request_id: int):
-        self.canceled_requests.add(request_id)
-        self.send_notification("$/cancelRequest", {"id": request_id})
 
     def send_response(
         self, request_id: int, result: Optional[Any] = None, error: Optional[Any] = None
@@ -223,22 +234,8 @@ class LSPServer:
             self._publish_diagnostics(params)
 
     def exec_response(self, response: dict):
-        message_id = response["id"]
-        try:
-            method = self.request_map.pop(message_id)
-
-            if error := response.get("error"):
-                if message_id in self.canceled_requests:
-                    self.canceled_requests.remove(message_id)
-                    return
-
-                LOGGER.info(error["message"])
-                return
-
-        except KeyError:
-            LOGGER.info("invalid response (%d)", message_id)
-        else:
-            self.handler.handle(method, response)
+        method = self.request_manager.get_method(response["id"])
+        self.handler.handle(method, response)
 
     def exec_message(self, message: RPCMessage):
         """exec received message"""
@@ -253,6 +250,14 @@ class LSPServer:
         message_id = message.get("id")
         method = message.get("method")
 
+        if self.request_manager.is_waiting_response() and message_id is not None:
+            LOGGER.info("Handle response (%d)", message_id)
+            try:
+                self.exec_response(message.data)
+            except Exception:
+                LOGGER.exception("error handle response", exc_info=True)
+                self.shutdown()
+
         if method:
             params = message.get("params")
 
@@ -263,8 +268,5 @@ class LSPServer:
                 LOGGER.info("Handle request (%d)", message_id)
                 self.request_handler.add(message_id, method, params)
 
-        elif message_id is not None:
-            LOGGER.info("Handle response (%d)", message_id)
-            self.exec_response(message.data)
         else:
             LOGGER.error("invalid message: '%s'", message)
