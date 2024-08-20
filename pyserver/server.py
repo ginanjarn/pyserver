@@ -171,7 +171,10 @@ class LSPServer:
         """listen message"""
 
         while True:
-            content = self.transport.read()
+            try:
+                content = self.transport.read()
+            except EOFError:
+                self.transport.terminate()
 
             try:
                 message = RPCMessage.from_bytes(content)
@@ -179,7 +182,7 @@ class LSPServer:
 
             except Exception as err:
                 LOGGER.critical(err, exc_info=True)
-                self.transport.terminate(exit_code=1)
+                self.transport.terminate()
 
             try:
                 self.exec_message(message)
