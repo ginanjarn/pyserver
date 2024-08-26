@@ -5,39 +5,32 @@ __all__ = ["DocumentURI", "Document", "Workspace", "path_to_uri", "uri_to_path"]
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict
-
 from urllib.parse import urlparse, urlunparse, quote, unquote
 from urllib.request import pathname2url, url2pathname
 
 from pyserver import errors
 
 
-# DocumentURI based on 'str' to make it JSON serializable
-class DocumentURI(str):
-    """document uri"""
-
-    @classmethod
-    def from_path(cls, path: Path):
-        """from file name"""
-        return cls(urlunparse(("file", "", quote(pathname2url(str(path))), "", "", "")))
-
-    def to_path(self) -> Path:
-        """convert to path"""
-        parsed = urlparse(self)
-        if parsed.scheme != "file":
-            raise ValueError("url scheme must be 'file'")
-
-        return Path(url2pathname(unquote(parsed.path)))
+DocumentURI = str
+"""Uniform Resource Identifier.
+See 'RFC 3986' specification.
+"""
 
 
 @lru_cache(128)
 def path_to_uri(path: Path) -> DocumentURI:
-    return DocumentURI.from_path(path)
+    """convert path to uri"""
+    return urlunparse(("file", "", quote(pathname2url(str(path))), "", "", ""))
 
 
 @lru_cache(128)
 def uri_to_path(uri: DocumentURI) -> Path:
-    return DocumentURI(uri).to_path()
+    """convert uri to path"""
+    parsed = urlparse(uri)
+    if parsed.scheme != "file":
+        raise ValueError("url scheme must be 'file'")
+
+    return Path(url2pathname(unquote(parsed.path)))
 
 
 class Document:
