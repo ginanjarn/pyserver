@@ -10,7 +10,6 @@ from pyserver import errors
 from pyserver.workspace import (
     Document,
     Workspace,
-    VersionedDocument,
     uri_to_path,
     path_to_uri,
 )
@@ -100,7 +99,7 @@ def textdocument_definition(workspace: Workspace, params: dict) -> None:
     except KeyError as err:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
-    with VersionedDocument(workspace.get_document(file_path)) as document:
-        params = DefinitionParams(document, line, character)
-        service = DefinitionService(params)
-        return service.get_result()
+    document = workspace.get_document(file_path)
+    params = DefinitionParams(document, line, character)
+    service = DefinitionService(params)
+    return service.get_result()

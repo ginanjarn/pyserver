@@ -10,7 +10,6 @@ from pyserver import errors
 from pyserver.workspace import (
     Document,
     Workspace,
-    VersionedDocument,
     uri_to_path,
 )
 
@@ -99,7 +98,7 @@ def textdocument_signaturehelp(workspace: Workspace, params: dict) -> None:
     except KeyError as err:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
-    with VersionedDocument(workspace.get_document(file_path)) as document:
-        params = SignatureHelpParams(document, line, character)
-        service = SignatureHelpService(params)
-        return service.get_result()
+    document = workspace.get_document(file_path)
+    params = SignatureHelpParams(document, line, character)
+    service = SignatureHelpService(params)
+    return service.get_result()

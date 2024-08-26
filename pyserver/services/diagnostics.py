@@ -12,7 +12,6 @@ from pyserver import errors
 from pyserver.workspace import (
     Document,
     Workspace,
-    VersionedDocument,
     uri_to_path,
     path_to_uri,
 )
@@ -133,7 +132,7 @@ def textdocument_publishdiagnostics(workspace: Workspace, params: dict):
     except KeyError as err:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
-    with VersionedDocument(workspace.get_document(file_path)) as document:
-        params = DiagnosticParams(document)
-        service = DiagnosticService(params)
-        return service.get_result()
+    document = workspace.get_document(file_path)
+    params = DiagnosticParams(document)
+    service = DiagnosticService(params)
+    return service.get_result()

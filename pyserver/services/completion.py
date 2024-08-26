@@ -12,7 +12,6 @@ from pyserver import errors
 from pyserver.workspace import (
     Document,
     Workspace,
-    VersionedDocument,
     uri_to_path,
 )
 
@@ -219,7 +218,7 @@ def textdocument_completion(workspace: Workspace, params: dict) -> None:
     except KeyError as err:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
-    with VersionedDocument(workspace.get_document(file_path)) as document:
-        params = CompletionParams(document, line, character)
-        service = CompletionService(params)
-        return service.get_result()
+    document = workspace.get_document(file_path)
+    params = CompletionParams(document, line, character)
+    service = CompletionService(params)
+    return service.get_result()
