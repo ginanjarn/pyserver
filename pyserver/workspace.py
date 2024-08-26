@@ -68,7 +68,14 @@ class Document:
         return path_to_uri(self.path)
 
     def apply_changes(self, content_changes: List[dict]):
-        for change in content_changes:
+        self.text = self._update_text(self.text, content_changes)
+
+    @staticmethod
+    def _update_text(text: str, changes: List[dict]) -> str:
+        temp = text
+        line_separator = "\n"
+
+        for change in changes:
             try:
                 start = change["range"]["start"]
                 end = change["range"]["end"]
@@ -80,7 +87,7 @@ class Document:
             except KeyError as err:
                 raise errors.InvalidParams(f"invalid params {err}") from err
 
-            lines = self.text.split("\n")
+            lines = temp.split(line_separator)
             temp_lines = []
 
             # pre change line
@@ -93,7 +100,9 @@ class Document:
             # post change line
             temp_lines.extend(lines[end_line + 1 :])
 
-            self.text = "\n".join(temp_lines)
+            temp = line_separator.join(temp_lines)
+
+        return temp
 
     def did_change(self, version: int, content_changes: List[dict], /):
         if version > self.version:
