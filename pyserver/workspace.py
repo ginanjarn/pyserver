@@ -36,7 +36,7 @@ def uri_to_path(uri: DocumentURI) -> Path:
 class Document:
     """Document object"""
 
-    __slots__ = ["workspace", "path", "language_id", "version", "text"]
+    __slots__ = ["workspace", "path", "language_id", "version", "text", "is_saved"]
 
     def __init__(
         self,
@@ -51,6 +51,7 @@ class Document:
         self.language_id = language_id
         self.version = version
         self.text = text
+        self.is_saved = True
 
     def __repr__(self) -> str:
         return f"Document({self.path!r})"
@@ -60,8 +61,12 @@ class Document:
         """document uri"""
         return path_to_uri(self.path)
 
+    def save(self):
+        self.is_saved = True
+
     def apply_changes(self, content_changes: List[dict]):
         self.text = self._update_text(self.text, content_changes)
+        self.is_saved = False
 
     @staticmethod
     def _update_text(text: str, changes: List[dict]) -> str:

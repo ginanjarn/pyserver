@@ -140,7 +140,13 @@ class LSPHandler(Handler):
 
     @session.must_initialized
     def textdocument_didsave(self, workspace: Workspace, params: dict) -> None:
-        pass
+        try:
+            file_path = uri_to_path(params["textDocument"]["uri"])
+        except KeyError as err:
+            raise errors.InvalidParams(f"invalid params: {err}") from err
+
+        if document := self.workspace.get_document(file_path):
+            document.save()
 
     @session.must_initialized
     def textdocument_didclose(self, workspace: Workspace, params: dict) -> None:
