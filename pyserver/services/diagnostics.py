@@ -3,6 +3,7 @@
 import re
 from dataclasses import dataclass
 from io import StringIO
+from pathlib import Path
 from typing import Dict, Any, Iterator, Iterable
 
 from pyflakes import api as pyflakes_api
@@ -10,7 +11,6 @@ from pyflakes.reporter import Reporter
 
 from pyserver import errors
 from pyserver.workspace import (
-    Document,
     Workspace,
     uri_to_path,
     path_to_uri,
@@ -19,19 +19,10 @@ from pyserver.workspace import (
 
 @dataclass
 class DiagnosticParams:
-    document: Document
-
-    def file_path(self):
-        return self.document.path
-
-    def text(self):
-        return self.document.text
-
-    def workspace(self) -> Workspace:
-        return self.document.workspace
-
-    def version(self):
-        return self.document.version
+    workspace_path: Path
+    file_path: Path
+    text: str
+    version: int
 
 
 KIND_ERROR = 1
@@ -93,13 +84,13 @@ class DiagnosticService:
         self.params = params
 
     def execute(self) -> Diagnostic:
-        diagnostic = PyflakesDiagnostic(self.params.file_path(), self.params.text())
+        diagnostic = PyflakesDiagnostic(self.params.file_path, self.params.text)
         return diagnostic.get_diagnostic()
 
     def build_items(
         self, diagnostics: Iterable[Diagnostic]
     ) -> Iterator[Dict[str, Any]]:
-        lines = self.params.text().split("\n")
+        lines = self.params.text.split("\n")
 
         def build_line_item(item: Diagnostic):
             return {
@@ -120,8 +111,8 @@ class DiagnosticService:
     def get_result(self) -> Dict[str, Any]:
         diagnostics = self.execute()
         return {
-            "uri": path_to_uri(self.params.file_path()),
-            "version": self.params.version(),
+            "uri": path_to_uri(self.params.file_path),
+            "version": self.params.version,
             "diagnostics": list(self.build_items(diagnostics)),
         }
 
@@ -133,6 +124,11 @@ def textdocument_publishdiagnostics(workspace: Workspace, params: dict):
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
     document = workspace.get_document(file_path)
-    params = DiagnosticParams(document)
+    params = DiagnosticParams(
+        workspace.root_path,
+        document.path,
+        document.text,
+        document.version,
+    )
     service = DiagnosticService(params)
     return service.get_result()

@@ -1,13 +1,13 @@
 """prepare rename service"""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 from jedi import Script, Project
 
 from pyserver import errors
 from pyserver.workspace import (
-    Document,
     Workspace,
     uri_to_path,
 )
@@ -15,21 +15,15 @@ from pyserver.workspace import (
 
 @dataclass
 class PrepareRenameParams:
-    document: Document
+    workspace_path: Path
+    file_path: Path
+    text: str
     line: int
     character: int
 
     def jedi_rowcol(self):
-        return (self.line + 1, self.character)
-
-    def file_path(self):
-        return self.document.path
-
-    def text(self):
-        return self.document.text
-
-    def workspace(self) -> Workspace:
-        return self.document.workspace
+        # jedi use one based line index
+        return self.line + 1, self.character
 
 
 @dataclass
@@ -45,9 +39,9 @@ class PrepareRenameService:
     def __init__(self, params: PrepareRenameParams):
         self.params = params
         self.script = Script(
-            self.params.text(),
-            path=self.params.file_path(),
-            project=Project(self.params.workspace().root_path),
+            self.params.text,
+            path=self.params.file_path,
+            project=Project(self.params.workspace_path),
         )
 
     def execute(self) -> Optional[Identifier]:
@@ -65,7 +59,7 @@ class PrepareRenameService:
                 raise ValueError("unable rename 'builtin'")
 
             if (path := name.module_path) and path.is_relative_to(
-                self.params.workspace().root_path
+                self.params.workspace_path
             ):
                 # only rename object inside of project
                 continue
@@ -106,6 +100,12 @@ def textdocument_preparerename(workspace: Workspace, params: dict) -> None:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
     document = workspace.get_document(file_path)
-    params = PrepareRenameParams(document, line, character)
+    params = PrepareRenameParams(
+        workspace.root_path,
+        document.path,
+        document.text,
+        line,
+        character,
+    )
     service = PrepareRenameService(params)
     return service.get_result()

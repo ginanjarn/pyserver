@@ -1,6 +1,7 @@
 """signature help service"""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Dict, Any
 
 from jedi import Script, Project
@@ -8,7 +9,6 @@ from jedi.api.classes import Signature
 
 from pyserver import errors
 from pyserver.workspace import (
-    Document,
     Workspace,
     uri_to_path,
 )
@@ -16,31 +16,20 @@ from pyserver.workspace import (
 
 @dataclass
 class SignatureHelpParams:
-    document: Document
+    workspace_path: Path
+    file_path: Path
+    text: str
     line: int
     character: int
-
-    def jedi_rowcol(self):
-        # jedi use one based line index
-        return self.line + 1, self.character
-
-    def file_path(self):
-        return self.document.path
-
-    def text(self):
-        return self.document.text
-
-    def workspace(self) -> Workspace:
-        return self.document.workspace
 
 
 class SignatureHelpService:
     def __init__(self, params: SignatureHelpParams):
         self.params = params
         self.script = Script(
-            self.params.text(),
-            path=self.params.file_path(),
-            project=Project(self.params.workspace().root_path),
+            self.params.text,
+            path=self.params.file_path,
+            project=Project(self.params.workspace_path),
         )
 
     def execute(self) -> List[Signature]:
@@ -99,6 +88,12 @@ def textdocument_signaturehelp(workspace: Workspace, params: dict) -> None:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
     document = workspace.get_document(file_path)
-    params = SignatureHelpParams(document, line, character)
+    params = SignatureHelpParams(
+        workspace.root_path,
+        document.path,
+        document.text,
+        line,
+        character,
+    )
     service = SignatureHelpService(params)
     return service.get_result()

@@ -2,6 +2,7 @@
 
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Any, List
 
 import black
@@ -9,7 +10,6 @@ import black
 from pyserver.services import diffutils
 from pyserver import errors
 from pyserver.workspace import (
-    Document,
     Workspace,
     uri_to_path,
 )
@@ -17,10 +17,8 @@ from pyserver.workspace import (
 
 @dataclass
 class FormattingParams:
-    document: Document
-
-    def text(self):
-        return self.document.text
+    file_path: Path
+    text: str
 
 
 class FormattingService:
@@ -28,7 +26,7 @@ class FormattingService:
         self.params = params
 
     def execute(self) -> str:
-        text = self.params.text()
+        text = self.params.text
         try:
             new_str = black.format_str(text, mode=black.FileMode())
 
@@ -44,7 +42,7 @@ class FormattingService:
 
     def get_result(self) -> List[Dict[str, Any]]:
         formatted_str = self.execute()
-        return diffutils.get_text_changes(self.params.text(), formatted_str)
+        return diffutils.get_text_changes(self.params.text, formatted_str)
 
 
 def textdocument_formatting(workspace: Workspace, params: dict) -> None:
@@ -54,6 +52,9 @@ def textdocument_formatting(workspace: Workspace, params: dict) -> None:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
     document = workspace.get_document(file_path)
-    params = FormattingParams(document)
+    params = FormattingParams(
+        document.path,
+        document.text,
+    )
     service = FormattingService(params)
     return service.get_result()

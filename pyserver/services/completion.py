@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from jedi import Script, Project
@@ -10,7 +11,6 @@ from parso.tree import Leaf
 
 from pyserver import errors
 from pyserver.workspace import (
-    Document,
     Workspace,
     uri_to_path,
 )
@@ -18,7 +18,9 @@ from pyserver.workspace import (
 
 @dataclass
 class CompletionParams:
-    document: Document
+    workspace_path: Path
+    file_path: Path
+    text: str
     line: int
     character: int
 
@@ -26,23 +28,14 @@ class CompletionParams:
         # jedi use one based line index
         return self.line + 1, self.character
 
-    def file_path(self):
-        return self.document.path
-
-    def text(self):
-        return self.document.text
-
-    def workspace(self) -> Workspace:
-        return self.document.workspace
-
 
 class CompletionService:
     def __init__(self, params: CompletionParams):
         self.params = params
         self.script = Script(
-            self.params.text(),
-            path=self.params.file_path(),
-            project=Project(self.params.workspace().root_path),
+            self.params.text,
+            path=self.params.file_path,
+            project=Project(self.params.workspace_path),
         )
 
         self.leaf = self.script._module_node.get_leaf_for_position(
@@ -219,6 +212,12 @@ def textdocument_completion(workspace: Workspace, params: dict) -> None:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
     document = workspace.get_document(file_path)
-    params = CompletionParams(document, line, character)
+    params = CompletionParams(
+        workspace.root_path,
+        document.path,
+        document.text,
+        line,
+        character,
+    )
     service = CompletionService(params)
     return service.get_result()

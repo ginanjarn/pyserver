@@ -1,6 +1,7 @@
 """completion service"""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Dict, Any
 
 from jedi import Script, Project
@@ -8,7 +9,6 @@ from jedi.api.classes import Name
 
 from pyserver import errors
 from pyserver.workspace import (
-    Document,
     Workspace,
     uri_to_path,
     path_to_uri,
@@ -17,7 +17,9 @@ from pyserver.workspace import (
 
 @dataclass
 class DefinitionParams:
-    document: Document
+    workspace_path: Path
+    file_path: Path
+    text: str
     line: int
     character: int
 
@@ -25,23 +27,14 @@ class DefinitionParams:
         # jedi use one based line index
         return self.line + 1, self.character
 
-    def file_path(self):
-        return self.document.path
-
-    def text(self):
-        return self.document.text
-
-    def workspace(self) -> Workspace:
-        return self.document.workspace
-
 
 class DefinitionService:
     def __init__(self, params: DefinitionParams):
         self.params = params
         self.script = Script(
-            self.params.text(),
-            path=self.params.file_path(),
-            project=Project(self.params.workspace().root_path),
+            self.params.text,
+            path=self.params.file_path,
+            project=Project(self.params.workspace_path),
         )
         self.identifier_leaf = self.script._module_node.get_leaf_for_position(
             self.params.jedi_rowcol()
@@ -100,6 +93,12 @@ def textdocument_definition(workspace: Workspace, params: dict) -> None:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
     document = workspace.get_document(file_path)
-    params = DefinitionParams(document, line, character)
+    params = DefinitionParams(
+        workspace.root_path,
+        document.path,
+        document.text,
+        line,
+        character,
+    )
     service = DefinitionService(params)
     return service.get_result()
