@@ -58,10 +58,6 @@ def main():
     srv.listen()
 
 
-if __name__ == "__main__":
-    main()
-
-
 def setup_logger(level: int):
     """setup logger"""
 
