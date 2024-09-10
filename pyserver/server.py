@@ -82,7 +82,7 @@ class RequestHandler:
             error = err
 
         except Exception as err:
-            LOGGER.exception(err, exc_info=True)
+            LOGGER.error("Error handle request: '%s'", err, exc_info=True)
             error = errors.InternalError(err)
 
         self.response_callback(request.id_, result, errors.transform_error(error))
@@ -181,17 +181,18 @@ class LSPServer:
                 LOGGER.debug("Received << %s", message)
 
             except Exception as err:
-                LOGGER.critical(err, exc_info=True)
+                LOGGER.error("Error parse message: '%s'", err, exc_info=True)
                 self.transport.terminate()
 
             try:
                 self.exec_message(message)
 
             except Exception as err:
-                LOGGER.error(err, exc_info=True)
+                LOGGER.error("Error handle message: '%s'", err, exc_info=True)
                 self.send_notification(
                     "window/logMessage", {"type": 1, "message": repr(err)}
                 )
+                self.transport.terminate()
 
     def _publish_diagnostics(self, params: dict):
         try:
@@ -209,7 +210,7 @@ class LSPServer:
             pass
 
         except Exception as err:
-            LOGGER.error(err, exc_info=True)
+            LOGGER.error("Error get diagnostics: '%s'", err, exc_info=True)
 
         else:
             self.send_notification(
@@ -251,25 +252,24 @@ class LSPServer:
         # * response only have single value of result or error
 
         message_id = message.get("id")
-        method = message.get("method")
 
         if self.request_manager.is_waiting_response() and message_id is not None:
             LOGGER.info("Handle response (%d)", message_id)
-            try:
-                self.exec_response(message.data)
-            except Exception:
-                LOGGER.exception("error handle response", exc_info=True)
-                self.shutdown()
+            self.exec_response(message.data)
+            return
 
-        if method:
-            params = message.get("params")
+        method = message.get("method")
+        params = message.get("params")
 
-            if message_id is None:
-                LOGGER.info("Handle notification (%s)", method)
-                self.exec_notification(method, params)
-            else:
-                LOGGER.info("Handle request (%d)", message_id)
-                self.request_handler.add(message_id, method, params)
+        if not method:
+            # request or notification message must contain method
+            raise errors.InternalError("Invalid message")
 
-        else:
-            LOGGER.error("invalid message: '%s'", message)
+        if message_id is None:
+            LOGGER.info("Handle notification (%s)", method)
+            self.exec_notification(method, params)
+            return
+
+        # else:
+        LOGGER.info("Handle request (%d)", message_id)
+        self.request_handler.add(message_id, method, params)
