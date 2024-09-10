@@ -22,6 +22,10 @@ class SignatureHelpParams:
     line: int
     character: int
 
+    def jedi_rowcol(self):
+        # jedi use one based line index
+        return self.line + 1, self.character
+
 
 class SignatureHelpService:
     def __init__(self, params: SignatureHelpParams):
