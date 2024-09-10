@@ -26,7 +26,7 @@ class RequestHandler:
 
     def __init__(
         self,
-        exec_callback: Callable[[int, str, dict], Any],
+        handle_function: Callable[[int, str, dict], Any],
         response_callback: Callable[[int, Any, Any], None],
     ):
         self.request_queue = queue.Queue()
@@ -37,7 +37,7 @@ class RequestHandler:
         self.current_id = -1
         self.in_process_id = -1
 
-        self.exec_callback = exec_callback
+        self.handle_function = handle_function
         self.response_callback = response_callback
 
     def add(self, request_id, method, params):
@@ -60,14 +60,14 @@ class RequestHandler:
             if request_id in self.canceled_requests:
                 raise errors.RequestCanceled(f'request canceled "{request_id}"')
 
-    def execute(self, request: RequestData):
+    def handle(self, request: RequestData):
         result, error = None, None
 
         try:
             # Check request cancelation before and after exec command
             self.check_canceled(request.id_)
             self.in_process_id = request.id_
-            result = self.exec_callback(request.method, request.params)
+            result = self.handle_function(request.method, request.params)
             self.check_canceled(request.id_)
 
         except errors.RequestCanceled as err:
@@ -87,13 +87,13 @@ class RequestHandler:
 
         self.response_callback(request.id_, result, errors.transform_error(error))
 
-    def _run(self):
+    def _run_task(self):
         while True:
             message = self.request_queue.get()
-            self.execute(message)
+            self.handle(message)
 
     def run(self):
-        thread = threading.Thread(target=self._run, daemon=True)
+        thread = threading.Thread(target=self._run_task, daemon=True)
         thread.start()
 
 
