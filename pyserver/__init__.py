@@ -61,26 +61,21 @@ def main():
 def setup_logger(level: int):
     """setup logger"""
 
-    # logging channel
-    logger = logging.getLogger("pyserver")
-
-    log_format = (
-        "[%(name)s]%(levelname)s %(asctime)s %(filename)s:%(lineno)s  %(message)s"
-    )
-
-    # Log to stderr
     stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(logging.Formatter(log_format))
-    logger.addHandler(stream_handler)
 
-    # Log to file
     log_directory = Path().home().joinpath(".pyserver")
     # create directory if not exist
     log_directory.mkdir(parents=True, exist_ok=True)
     file_handler = logging.FileHandler(log_directory.joinpath("pyserver.log"))
     file_handler.setLevel(logging.ERROR)
-    file_handler.setFormatter(logging.Formatter(log_format))
-    logger.addHandler(file_handler)
+
+    # Global config
+    log_format = "%(levelname)s\t%(asctime)s %(filename)s:%(lineno)s  %(message)s"
+    logging.basicConfig(format=log_format, handlers=[stream_handler, file_handler])
+
+    # Channel specific config
+    logger = logging.getLogger("pyserver")
+    logger.setLevel(level)
 
 
 def load_services(handler: LSPHandler):
