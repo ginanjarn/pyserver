@@ -69,9 +69,13 @@ class Document:
         self.is_saved = False
 
     @staticmethod
+    def get_offset(lines: List[str], row: int, column: int) -> int:
+        line_offset = sum([len(l) for l in lines[:row]])
+        return line_offset + column
+
+    @staticmethod
     def _update_text(text: str, changes: List[dict]) -> str:
         temp = text
-        line_separator = "\n"
 
         for change in changes:
             try:
@@ -85,20 +89,10 @@ class Document:
             except KeyError as err:
                 raise errors.InvalidParams(f"invalid params {err}") from err
 
-            lines = temp.split(line_separator)
-            temp_lines = []
-
-            # pre change line
-            temp_lines.extend(lines[:start_line])
-            # line changed
-            prefix = lines[start_line][:start_character]
-            suffix = lines[end_line][end_character:]
-            line = f"{prefix}{new_text}{suffix}"
-            temp_lines.append(line)
-            # post change line
-            temp_lines.extend(lines[end_line + 1 :])
-
-            temp = line_separator.join(temp_lines)
+            lines = temp.splitlines(keepends=True)
+            start_offset = Document.get_offset(lines, start_line, start_character)
+            end_offset = Document.get_offset(lines, end_line, end_character)
+            temp = f"{temp[:start_offset]}{new_text}{temp[end_offset:]}"
 
         return temp
 
