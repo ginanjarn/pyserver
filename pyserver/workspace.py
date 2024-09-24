@@ -5,8 +5,8 @@ __all__ = ["DocumentURI", "Document", "Workspace", "path_to_uri", "uri_to_path"]
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict
-from urllib.parse import urlparse, urlunparse, quote, unquote
-from urllib.request import pathname2url, url2pathname
+from urllib.parse import urlparse, unquote_plus
+from urllib.request import url2pathname
 
 from pyserver import errors
 
@@ -20,7 +20,7 @@ See 'RFC 3986' specification.
 @lru_cache(128)
 def path_to_uri(path: Path) -> DocumentURI:
     """convert path to uri"""
-    return urlunparse(("file", "", quote(pathname2url(str(path))), "", "", ""))
+    return Path(path).as_uri()
 
 
 @lru_cache(128)
@@ -30,7 +30,7 @@ def uri_to_path(uri: DocumentURI) -> Path:
     if parsed.scheme != "file":
         raise ValueError("url scheme must be 'file'")
 
-    return Path(url2pathname(unquote(parsed.path)))
+    return Path(url2pathname(unquote_plus(parsed.path)))
 
 
 class Document:
