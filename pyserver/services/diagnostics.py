@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from io import StringIO
 from pathlib import Path
 from typing import Dict, Any, Iterator, Iterable
@@ -63,20 +64,27 @@ class PyflakesDiagnostic:
     def parse_report(
         self, severity_kind: int, buffer: StringIO
     ) -> Iterator[Diagnostic]:
-        # Seek offset to beginnig of buffer
-        buffer.seek(0)
+        diagnostics = (
+            self._parse_line(severity_kind, line)
+            for line in buffer.getvalue().splitlines()
+        )
+        # remove item if None
+        yield from (d for d in diagnostics if d)
 
-        while line := buffer.readline():
-            if match := self.report_pattern.match(line):
-                file_name, line, column, message = match.groups()
-                yield Diagnostic(
-                    severity_kind,
-                    file_name,
-                    int(line) - 1,  # Pyflakes use 1 based line index
-                    int(column),
-                    message,
-                    "pyflakes",
-                )
+    @lru_cache
+    def _parse_line(self, severity_kind: int, line: str) -> Diagnostic:
+        if match := self.report_pattern.match(line):
+            file_name, line, column, message = match.groups()
+            return Diagnostic(
+                severity_kind,
+                file_name,
+                int(line) - 1,  # Pyflakes use 1 based line index
+                int(column),
+                message,
+                "pyflakes",
+            )
+
+        return None
 
 
 class DiagnosticService:
