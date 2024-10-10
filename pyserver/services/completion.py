@@ -135,53 +135,52 @@ class CompletionService:
             "end": {"line": linepos, "character": end_char},
         }
 
-    def build_items(self, completions: List[Completion]) -> List[dict]:
-        def build_item(completion: Completion):
-            text = completion.name
-            signature = ""
-            insert_text = text
-            completion_type = None
+    def _build_item(self, completion: Completion) -> dict:
+        text = completion.name
+        signature_text = ""
+        insert_text = text
+        completion_type = completion.type
 
-            try:
-                completion_type = completion.type
-            except Exception:
-                pass
+        # only get signatures for class and function
+        if completion_type in {"class", "function"}:
+            signatures = completion.get_signatures()
+            visible_signature = None
 
-            if (
-                self.is_append_bracket
-                and bool(completion_type)
-                and completion_type == "function"
+            if signatures:
+                visible_signature = signatures[0]
+                signature_text = visible_signature.to_string()
+
+            # append bracket for function
+            if all(
+                [
+                    visible_signature,
+                    completion_type == "function",
+                    self.is_append_bracket,
+                ]
             ):
-                insert_text = f"{text}(${{0}})"
+                if params := visible_signature.params:
+                    # overriden method
+                    if params[0].name == "self":
+                        insert_text = signature_text
+                    else:
+                        insert_text = f"{text}(${{1}})"
+                else:
+                    insert_text = f"{text}()"
 
-            # only show signature for class and function
-            if completion_type in {"class", "function"}:
-                try:
-                    signatures = completion._get_signatures(for_docstring=True)
-                except Exception:
-                    pass
-
-                if signatures:
-                    signature = signatures[0].to_string()
-
-            item = {
-                "label": text,
-                "labelDetails": {},
-                "kind": self.kind_map[completion_type],
-                "preselect": False,
-                "sortText": text,
-                "filterText": text,
-                "detail": signature,
-                "insertTextFormat": 1,  # insert format = text
-                "textEdit": {
-                    "range": self.text_edit_range,
-                    "newText": insert_text,
-                },
-            }
-
-            return item
-
-        return [build_item(completion) for completion in completions]
+        return {
+            "label": text,
+            "labelDetails": {},
+            "kind": self.kind_map[completion_type],
+            "preselect": False,
+            "sortText": text,
+            "filterText": text,
+            "detail": signature_text,
+            "insertTextFormat": 2,  # insert format = snippet
+            "textEdit": {
+                "range": self.text_edit_range,
+                "newText": insert_text,
+            },
+        }
 
     def get_result(self) -> Dict[str, Any]:
         try:
@@ -190,7 +189,7 @@ class CompletionService:
             candidates = []
 
         # transform as rpc
-        result = {
+        return {
             "isIncomplete": True,
             "itemDefaults": {
                 "editRange": {
@@ -198,9 +197,8 @@ class CompletionService:
                     "end": {"line": 0, "character": 0},
                 }
             },
-            "items": self.build_items(candidates),
+            "items": [self._build_item(completion) for completion in candidates],
         }
-        return result
 
 
 def textdocument_completion(workspace: Workspace, params: dict) -> None:
