@@ -3,7 +3,9 @@
 import sys
 import argparse
 import logging
+from importlib import import_module
 from pathlib import Path
+from typing import Any, Optional
 
 from pyserver.handler import LSPHandler
 from pyserver.server import LSPServer
@@ -78,37 +80,59 @@ def setup_logger(level: int):
     logger.setLevel(level)
 
 
+def try_import(mod_name: str, /, attr_name: str = "") -> Optional[Any]:
+    """Try import module or attribute. Return 'None' if error raised."""
+    try:
+        mod = import_module(mod_name)
+        if not attr_name:
+            return mod
+        return getattr(mod, attr_name)
+
+    except Exception:
+        return None
+
+
 def load_services(handler: LSPHandler):
     """load services"""
-    try:
-        from pyserver.services.completion import textdocument_completion
-        from pyserver.services.hover import textdocument_hover
-        from pyserver.services.definition import textdocument_definition
-        from pyserver.services.formatting import textdocument_formatting
-        from pyserver.services.diagnostics import textdocument_publishdiagnostics
-        from pyserver.services.prepare_rename import textdocument_preparerename
-        from pyserver.services.rename import textdocument_rename
-        from pyserver.services.signature_help import textdocument_signaturehelp
 
-    except ImportError as err:
-        err_message = (
-            "Error import required packages!\n\n"
-            "Following required packages must be installed:\n"
-            "- jedi\n- black\n- pyflakes\n"
-            f"Error: {err!r}\n"
-        )
-        print(err_message, file=sys.stderr)
-        sys.exit(1)
+    service_map = {
+        "textDocument/completion": (
+            "pyserver.services.completion",
+            "textdocument_completion",
+        ),
+        "textDocument/hover": (
+            "pyserver.services.hover",
+            "textdocument_hover",
+        ),
+        "textDocument/definition": (
+            "pyserver.services.definition",
+            "textdocument_definition",
+        ),
+        "textDocument/formatting": (
+            "pyserver.services.formatting",
+            "textdocument_formatting",
+        ),
+        "textDocument/publishDiagnostics": (
+            "pyserver.services.diagnostics",
+            "textdocument_publishdiagnostics",
+        ),
+        "textDocument/prepareRename": (
+            "pyserver.services.prepare_rename",
+            "textdocument_preparerename",
+        ),
+        "textDocument/rename": (
+            "pyserver.services.rename",
+            "textdocument_rename",
+        ),
+        "textDocument/signatureHelp": (
+            "pyserver.services.signature_help",
+            "textdocument_signaturehelp",
+        ),
+    }
 
-    handler.register_handlers(
-        {
-            "textDocument/completion": textdocument_completion,
-            "textDocument/hover": textdocument_hover,
-            "textDocument/definition": textdocument_definition,
-            "textDocument/formatting": textdocument_formatting,
-            "textDocument/publishDiagnostics": textdocument_publishdiagnostics,
-            "textDocument/prepareRename": textdocument_preparerename,
-            "textDocument/rename": textdocument_rename,
-            "textDocument/signatureHelp": textdocument_signaturehelp,
-        }
-    )
+    for name, service_func in service_map.items():
+        if func := try_import(*service_func):
+            handler.register_handlers({name: func})
+        else:
+            err_message = f"Error load {name!r} service."
+            print(err_message, file=sys.stderr)
