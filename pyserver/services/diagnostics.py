@@ -1,14 +1,12 @@
 """completion service"""
 
-import re
 from dataclasses import dataclass
-from functools import lru_cache
-from io import StringIO
 from pathlib import Path
-from typing import Dict, Any, Iterator, Iterable
+from typing import Dict, Any, Iterator, Iterable, List
 
 from pyflakes import api as pyflakes_api
-from pyflakes.reporter import Reporter
+from pyflakes import reporter as pyflakes_reporter
+from pyflakes import messages as pyflakes_messages
 
 from pyserver import errors
 from pyserver.workspace import (
@@ -40,51 +38,54 @@ class Diagnostic:
     source: str
 
 
+class PyflakesReporter(pyflakes_reporter.Reporter):
+    """Custom Reporter adapted from 'pyflakes.Reporter'"""
+
+    def __init__(self):
+        self.reports: List[Diagnostic] = []
+
+    def unexpectedError(self, filename, msg):
+        pass
+
+    def syntaxError(self, filename, msg, lineno, offset, text):
+        # lineno might be None if the error was during tokenization
+        # lineno might be 0 if the error came from stdin
+        lineno = lineno or 1
+        offset = offset or 1
+
+        # some versions of python emit an offset of -1 for certain encoding errors
+        offset = max(offset, 1)
+
+        # python ast use 1-based index
+        lineno -= 1
+        offset -= 1
+        self.reports.append(
+            Diagnostic(KIND_ERROR, filename, lineno, offset, msg, "pyflakes")
+        )
+
+    def flake(self, message: pyflakes_messages.Message):
+        # look at the '__str__' of 'pyflakes.Message'
+        filename = message.filename
+        lineno = message.lineno - 1  # use 0-based index
+        offset = message.col  # has already use 0-based index
+        msg = message.message % message.message_args
+        self.reports.append(
+            Diagnostic(KIND_WARNING, filename, lineno, offset, msg, "pyflakes")
+        )
+
+
 class PyflakesDiagnostic:
     def __init__(self, file_name: str, text: str, /):
         self.file_name = file_name
         self.text = text
 
-    # pattern '<file_name>:<line>:<column>:? <message>'
-    report_pattern = re.compile(r"^(.+):(\d+):(\d+):?\ (.+)")
-
     def get_diagnostic(self) -> Iterator[Diagnostic]:
-        # Pyflakes reporter
-        warning_buffer = StringIO()
-        error_buffer = StringIO()
-        reporter = Reporter(warning_buffer, error_buffer)
-
+        reporter = PyflakesReporter()
         n_report = pyflakes_api.check(self.text, self.file_name, reporter)
         if not n_report:
             return
 
-        yield from self.parse_report(KIND_ERROR, error_buffer)
-        yield from self.parse_report(KIND_WARNING, warning_buffer)
-
-    def parse_report(
-        self, severity_kind: int, buffer: StringIO
-    ) -> Iterator[Diagnostic]:
-        diagnostics = (
-            self._parse_line(severity_kind, line)
-            for line in buffer.getvalue().splitlines()
-        )
-        # remove item if None
-        yield from (d for d in diagnostics if d)
-
-    @lru_cache
-    def _parse_line(self, severity_kind: int, line: str) -> Diagnostic:
-        if match := self.report_pattern.match(line):
-            file_name, line, column, message = match.groups()
-            return Diagnostic(
-                severity_kind,
-                file_name,
-                int(line) - 1,  # Pyflakes use 1 based line index
-                int(column),
-                message,
-                "pyflakes",
-            )
-
-        return None
+        yield from iter(reporter.reports)
 
 
 class DiagnosticService:
