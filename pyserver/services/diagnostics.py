@@ -1,12 +1,12 @@
 """completion service"""
 
+import ast
 from dataclasses import dataclass
+from collections import namedtuple
 from pathlib import Path
-from typing import Dict, Any, Iterator, Iterable, List
+from typing import Dict, Any, Iterator, Iterable
 
-from pyflakes import api as pyflakes_api
-from pyflakes import reporter as pyflakes_reporter
-from pyflakes import messages as pyflakes_messages
+from pyflakes import checker
 
 from pyserver import errors
 from pyserver.workspace import (
@@ -27,51 +27,17 @@ class DiagnosticParams:
 KIND_ERROR = 1
 KIND_WARNING = 2
 
+RowCol = namedtuple("RowCol", ["row", "column"])
+TextRange = namedtuple("TextRange", ["start", "end"])
+
 
 @dataclass
 class Diagnostic:
     severity: int
     file_name: str
-    line: int
-    column: int
+    text_range: TextRange
     message: str
     source: str
-
-
-class PyflakesReporter(pyflakes_reporter.Reporter):
-    """Custom Reporter adapted from 'pyflakes.Reporter'"""
-
-    def __init__(self):
-        self.reports: List[Diagnostic] = []
-
-    def unexpectedError(self, filename, msg):
-        pass
-
-    def syntaxError(self, filename, msg, lineno, offset, text):
-        # lineno might be None if the error was during tokenization
-        # lineno might be 0 if the error came from stdin
-        lineno = lineno or 1
-        offset = offset or 1
-
-        # some versions of python emit an offset of -1 for certain encoding errors
-        offset = max(offset, 1)
-
-        # python ast use 1-based index
-        lineno -= 1
-        offset -= 1
-        self.reports.append(
-            Diagnostic(KIND_ERROR, filename, lineno, offset, msg, "pyflakes")
-        )
-
-    def flake(self, message: pyflakes_messages.Message):
-        # look at the '__str__' of 'pyflakes.Message'
-        filename = message.filename
-        lineno = message.lineno - 1  # use 0-based index
-        offset = message.col  # has already use 0-based index
-        msg = message.message % message.message_args
-        self.reports.append(
-            Diagnostic(KIND_WARNING, filename, lineno, offset, msg, "pyflakes")
-        )
 
 
 class PyflakesDiagnostic:
@@ -80,12 +46,81 @@ class PyflakesDiagnostic:
         self.text = text
 
     def get_diagnostic(self) -> Iterator[Diagnostic]:
-        reporter = PyflakesReporter()
-        n_report = pyflakes_api.check(self.text, self.file_name, reporter)
-        if not n_report:
-            return
+        yield from self._check(self.file_name, self.text)
 
-        yield from iter(reporter.reports)
+    def _check(self, filename: str, source: str, /) -> Iterator[Diagnostic]:
+        try:
+            tree = ast.parse(source, filename=filename)
+
+        except SyntaxError as err:
+            yield from self._get_error(err, filename)
+        else:
+            yield from self._get_warnings(tree, filename)
+
+    def _get_error(self, err: SyntaxError, filename: str) -> Iterator[Diagnostic]:
+
+        # lineno might be None if the error was during tokenization
+        # lineno might be 0 if the error came from stdin
+        lineno = err.lineno or 1
+        offset = err.offset or 1
+
+        # some versions of python emit an offset of -1 for certain encoding errors
+        offset = max(offset, 1)
+
+        # python ast use 1-based line index
+        lineno -= 1
+        offset -= 1
+
+        msg = err.args[0]
+
+        # entire error line as range
+        lines = self.text.splitlines()
+        start = RowCol(lineno, 0)
+        end = RowCol(lineno, len(lines[lineno]))
+        text_range = TextRange(start, end)
+        yield Diagnostic(KIND_ERROR, filename, text_range, msg, "pyflakes")
+
+    def _get_warnings(self, node: ast.AST, filename: str) -> Iterator[Diagnostic]:
+
+        w = checker.Checker(node, filename=filename)
+        w.messages.sort(key=lambda m: m.lineno)
+
+        for message in w.messages:
+            # look at the '__str__' of 'pyflakes.Message'
+            filename = message.filename
+            lineno = message.lineno
+            offset = message.col
+            msg = message.message % message.message_args
+
+            text_range = self._get_leaf_range(node, RowCol(lineno, offset))
+            yield Diagnostic(KIND_WARNING, filename, text_range, msg, "pyflakes")
+
+    def _get_leaf_range(self, node: ast.AST, location: RowCol) -> TextRange:
+        visitor = FindLeafVisitor(*location)
+        visitor.visit(node)
+        target_node = visitor.target_node
+
+        # python ast use 1-based line index
+        start = RowCol(target_node.lineno - 1, target_node.col_offset)
+        end = RowCol(target_node.end_lineno - 1, target_node.end_col_offset)
+        return TextRange(start, end)
+
+
+class FindLeafVisitor(ast.NodeVisitor):
+    def __init__(self, line: int, col: int, /) -> None:
+        self.line = line
+        self.col = col
+        self.target_node = None
+
+    def visit(self, node: ast.AST) -> Any:
+        try:
+            if (node.lineno <= self.line) and (self.line <= node.end_lineno):
+                if (node.col_offset <= self.col) and (self.col <= node.end_col_offset):
+                    self.target_node = node
+        except AttributeError:
+            pass
+
+        self.generic_visit(node)
 
 
 class DiagnosticService:
@@ -99,15 +134,14 @@ class DiagnosticService:
     def build_items(
         self, diagnostics: Iterable[Diagnostic]
     ) -> Iterator[Dict[str, Any]]:
-        lines = self.params.text.split("\n")
 
         def build_line_item(item: Diagnostic):
+            start, end = item.text_range
+
             return {
-                # unable determine error location correctly
-                # put the line as range
                 "range": {
-                    "start": {"line": item.line, "character": 0},
-                    "end": {"line": item.line, "character": len(lines[item.line])},
+                    "start": {"line": start.row, "character": start.column},
+                    "end": {"line": end.row, "character": end.column},
                 },
                 "severity": item.severity,
                 "source": item.source,
