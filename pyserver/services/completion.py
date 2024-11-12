@@ -38,33 +38,37 @@ class CompletionService:
             project=Project(self.params.workspace_path),
         )
 
-        self.leaf = self.script._module_node.get_leaf_for_position(
-            self.params.jedi_rowcol()
+        cursor_leaf = self.script._module_node.get_leaf_for_position(
+            params.jedi_rowcol()
         )
-        self.text_edit_range = self._get_replaced_text_range()
-        self.is_append_bracket = self._check_can_append_bracket(self.leaf)
+        cursor_line = self.script._code_lines[params.line]
+
+        self.text_edit_range = self._get_replaced_text_range(
+            params.jedi_rowcol(), cursor_leaf
+        )
+        self.is_valid_scope = self._check_is_valid_scope(cursor_leaf)
+        self.is_append_bracket = self._check_is_append_bracket(cursor_line, cursor_leaf)
 
     def execute(self) -> List[Completion]:
-        if not self.can_fetch_completion():
+        if not self.is_valid_scope:
             return []
 
         row, col = self.params.jedi_rowcol()
         return self.script.complete(row, col)
 
-    def can_fetch_completion(self) -> bool:
-        leaf = self.leaf
-
+    def _check_is_valid_scope(self, leaf: Optional[Leaf]) -> bool:
         if not leaf:
             return True
 
         leaf_type = leaf.type
 
+        if leaf_type in {"name", "keyword"}:
+            return True
+
         if leaf_type in {"string", "fstring_string", "number"}:
             return False
 
-        # closing operator
         closing_operator = {":", ")", "]", "}"}
-
         if leaf.value in closing_operator:
             return False
 
@@ -85,13 +89,13 @@ class CompletionService:
 
         return True
 
-    def _check_can_append_bracket(self, leaf: Optional[Leaf]) -> bool:
-        trigger_line = self.script._code_lines[self.params.line].lstrip()
+    def _check_is_append_bracket(self, cursor_line: str, leaf: Optional[Leaf]) -> bool:
+        cursor_line = cursor_line.lstrip()
         if any(
             [
-                trigger_line.startswith("@"),  # decorator
-                trigger_line.startswith("import"),  # import
-                trigger_line.startswith("from"),  # from .. import
+                cursor_line.startswith("@"),  # decorator
+                cursor_line.startswith("import"),  # import
+                cursor_line.startswith("from"),  # from .. import
             ]
         ):
             return False
@@ -99,11 +103,30 @@ class CompletionService:
         if not leaf:
             return False
 
-        if next_leaf := leaf.get_next_leaf():
-            if next_leaf.value == "(":
-                return False
+        if (next_leaf := leaf.get_next_leaf()) and next_leaf.value == "(":
+            return False
+
+        if (parent := leaf.parent) and "import" in parent.type:
+            return False
 
         return True
+
+    def _get_replaced_text_range(
+        self, cursor_location: tuple, leaf: Optional[Leaf]
+    ) -> dict:
+        """get replaced text range"""
+
+        if leaf and leaf.type == "name":
+            start = leaf.start_pos
+            end = leaf.end_pos
+        else:
+            start = end = cursor_location
+
+        # jedi use 1-based line index
+        return {
+            "start": {"line": start[0] - 1, "character": start[1]},
+            "end": {"line": end[0] - 1, "character": end[1]},
+        }
 
     kind_map = defaultdict(
         lambda: 1,  # default 'text'
@@ -119,21 +142,6 @@ class CompletionService:
             "statement": 6,
         },
     )
-
-    def _get_replaced_text_range(self) -> dict:
-        """get replaced text range"""
-
-        linepos = self.params.line
-        start_char = end_char = self.params.character
-
-        if (leaf := self.leaf) and leaf.type == "name":
-            start_char = leaf.start_pos[1]
-            end_char = leaf.end_pos[1]
-
-        return {
-            "start": {"line": linepos, "character": start_char},
-            "end": {"line": linepos, "character": end_char},
-        }
 
     def _build_item(self, completion: Completion) -> dict:
         text = completion.name
@@ -153,9 +161,9 @@ class CompletionService:
             # append bracket for function
             if all(
                 [
+                    self.is_append_bracket,
                     visible_signature,
                     completion_type == "function",
-                    self.is_append_bracket,
                 ]
             ):
                 if params := visible_signature.params:
