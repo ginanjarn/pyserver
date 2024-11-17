@@ -51,11 +51,10 @@ class HoverService:
 
     def build_item(self, name: Name):
         buffer = StringIO()
+        buffer.write(f"### {name.type} `{name.name}`\n\n")
 
         if (module_name := name.module_name) and module_name != "__main__":
             buffer.write(f"module: `{module_name}`\n\n")
-
-        buffer.write(f"### {name.type} `{name.name}`\n\n")
 
         if name.type in {"class", "function"}:
             if signature := name._get_docstring_signature():
