@@ -3,78 +3,49 @@
 __all__ = ["RPCMessage"]
 
 import json
-from typing import Any, Optional
+from typing import Optional, Union
 from pyserver.errors import ParseError
 
+MethodName = str
 
-class RPCMessage:
+
+class RPCMessage(dict):
     """rpc message"""
 
-    JSONRPC_VERSION = "2.0"
-    CONTENT_ENCODING = "utf-8"
-
-    __slots__ = ["data"]
-
-    def __init__(self, data: dict):
-        if not isinstance(data, dict):
-            raise TypeError("message type must <class 'dict'>")
-
-        self.data = data
-        # set jsonrpc version
-        self.data["jsonrpc"] = self.JSONRPC_VERSION
-
-    def __repr__(self):
-        return f"RPCMessage({self.data})"
-
-    def get(self, key: str) -> None:
-        """get data
-
-        Returns:
-            Any data or None if key not found
-        """
-        return self.data.get(key)
-
-    def set(self, key: str, value: Any):
-        self.data.set(key, value)
-
-    def to_bytes(self) -> bytes:
-        """serialize data to bytes"""
-
-        message_str = json.dumps(self.data)
-        message_encoded = message_str.encode(self.CONTENT_ENCODING)
-        return message_encoded
+    @classmethod
+    def request(cls, id: int, method: MethodName, params: dict):
+        return cls({"id": id, "method": method, "params": params})
 
     @classmethod
-    def from_bytes(cls, b: bytes, /):
-        """create from bytes"""
-
-        try:
-            message_str = b.decode(cls.CONTENT_ENCODING)
-            message = json.loads(message_str)
-
-            if message["jsonrpc"] != cls.JSONRPC_VERSION:
-                raise ValueError("invalid jsonrpc version")
-
-        except Exception as err:
-            raise ParseError(err) from err
-        else:
-            return cls(message)
-
-    @classmethod
-    def notification(cls, method: str, params: Any):
-        """create notification message"""
+    def notification(cls, method: MethodName, params: dict):
         return cls({"method": method, "params": params})
 
     @classmethod
-    def request(cls, id_: int, method: str, params: Any):
-        """create request message"""
-        return cls({"id": id_, "method": method, "params": params})
+    def response(
+        cls, id: int, result: Optional[dict] = None, error: Optional[dict] = None
+    ):
+        if error:
+            return cls({"id": id, "error": error})
+        return cls({"id": id, "result": result})
+
+    def dumps(self, *, as_bytes: bool = False) -> Union[str, bytes]:
+        """dump rpc message to json text"""
+
+        self["jsonrpc"] = "2.0"
+        dumped = json.dumps(self)
+        if as_bytes:
+            return dumped.encode()
+        return dumped
 
     @classmethod
-    def response(
-        cls, id_: int, result: Optional[dict] = None, error: Optional[dict] = None
-    ):
-        """create response message"""
-        if error:
-            return cls({"id": id_, "error": error})
-        return cls({"id": id_, "result": result})
+    def loads(cls, data: Union[str, bytes]) -> "RPCMessage":
+        """load rpc message from json text"""
+
+        try:
+            loaded = json.loads(data)
+        except json.JSONDecoder as err:
+            raise ParseError(err) from err
+
+        if loaded.get("jsonrpc") != "2.0":
+            raise ValueError("JSON-RPC v2.0 is required")
+        return cls(loaded)

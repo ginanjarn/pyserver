@@ -3,6 +3,7 @@
 import sys
 import argparse
 import logging
+from functools import partial
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Optional
@@ -11,9 +12,12 @@ from pyserver.handler import LSPHandler
 from pyserver.server import LSPServer
 from pyserver.transport import StandardIO
 
+printerr = partial(print, file=sys.stderr)
+"""print to stderr"""
+
 ver = sys.version_info
 if ver < (3, 8):
-    print("Python >= 3.8 is required !!!", file=sys.stderr)
+    printerr("Python >= 3.8 is required !!!")
     sys.exit(1)
 
 
@@ -38,13 +42,13 @@ def main():
     arguments = parser.parse_args()
 
     if arguments.version:
-        print("version", __version__)
+        printerr("version", __version__)
         sys.exit(0)
 
     if arguments.stdin:
         transport_ = StandardIO()
     else:
-        print("Currently only standard input implementation available.")
+        printerr("Currently only standard input implementation available.")
         parser.print_help()
         sys.exit(1)
 
@@ -135,4 +139,4 @@ def load_services(handler: LSPHandler):
             handler.register_handlers({name: func})
         else:
             err_message = f"Error load {name!r} service."
-            print(err_message, file=sys.stderr)
+            printerr(err_message)

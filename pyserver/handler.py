@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from functools import wraps
-from typing import Callable, Dict, Any
+from typing import Callable, Dict, Any, Optional
 
 from pyserver import errors
 from pyserver.workspace import Workspace, uri_to_path
@@ -25,14 +25,18 @@ class SessionManager:
     """
 
     def __init__(self):
+        self.workspace: Workspace = None
         self.is_initialized = False
         self.is_shuttingdown = False
 
-    def initialize(self):
-        self.is_initialized = True
-        self.is_shuttingdown = False
+    def initialize(self, workspace: Workspace):
+        self.workspace = workspace
+
+    def set_initialized(self, status: bool = True):
+        self.is_initialized = status
 
     def shutdown(self):
+        self.workspace = None
         self.is_shuttingdown = True
 
     def must_initialized(self, func):
@@ -48,6 +52,7 @@ class SessionManager:
         return wrapper
 
 
+MethodName = str
 RPCParams = Dict[str, Any]
 HandlerCallback = Callable[[Workspace, RPCParams], None]
 
@@ -59,7 +64,6 @@ class LSPHandler(Handler):
     session = SessionManager()
 
     def __init__(self):
-        self.workspace = None
         self._internal_handler_map = {
             "initialize": self.initialize,
             "initialized": self.initialized,
@@ -69,19 +73,20 @@ class LSPHandler(Handler):
             "textDocument/didSave": self.textdocument_didsave,
             "textDocument/didClose": self.textdocument_didclose,
         }
-
         self._extension_handler_map = {}
 
-    def register_handlers(self, mapping: Dict[str, HandlerCallback] = None):
+    def register_handlers(self, mapping: Dict[MethodName, HandlerCallback] = None):
         self._extension_handler_map.update(mapping)
 
-    def handle(self, method: str, params: dict):
+    def handle(self, method: str, params: dict) -> Optional[Any]:
         if self.session.is_shuttingdown:
-            raise errors.InvalidRequest("shutting down, 'exit' command required")
+            raise errors.InvalidRequest("'exit' command is required")
+
+        workspace = self.session.workspace
 
         # builtin handler
         if func := self._internal_handler_map.get(method):
-            return func(self.workspace, params)
+            return func(workspace, params)
 
         # external handler must initialized
         if not self.session.is_initialized:
@@ -93,13 +98,13 @@ class LSPHandler(Handler):
             raise errors.MethodNotFound(f"method not found {method!r}") from err
 
         # external handler
-        return func(self.workspace, params)
+        return func(workspace, params)
 
     def initialized(self, workspace: Workspace, params: dict) -> None:
-        if not self.workspace:
+        if not self.session.workspace:
             raise errors.InternalError("workspace not defined")
 
-        self.session.initialize()
+        self.session.set_initialized()
         return None
 
     @session.must_initialized
@@ -121,7 +126,7 @@ class LSPHandler(Handler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         # setup workspace
-        self.workspace = Workspace(root_path)
+        self.session.initialize(Workspace(root_path))
 
         return {}
 
@@ -136,7 +141,7 @@ class LSPHandler(Handler):
         except KeyError as err:
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        self.workspace.add_document(file_path, language_id, version, text)
+        workspace.add_document(file_path, language_id, version, text)
 
     @session.must_initialized
     def textdocument_didsave(self, workspace: Workspace, params: dict) -> None:
@@ -145,7 +150,7 @@ class LSPHandler(Handler):
         except KeyError as err:
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        if document := self.workspace.get_document(file_path):
+        if document := workspace.get_document(file_path):
             document.save()
 
     @session.must_initialized
@@ -155,7 +160,7 @@ class LSPHandler(Handler):
         except KeyError as err:
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        self.workspace.remove_document(file_path)
+        workspace.remove_document(file_path)
 
     @session.must_initialized
     def textdocument_didchange(self, workspace: Workspace, params: dict) -> None:
@@ -166,5 +171,5 @@ class LSPHandler(Handler):
         except KeyError as err:
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
-        document = self.workspace.get_document(file_path)
+        document = workspace.get_document(file_path)
         document.did_change(version, content_changes)

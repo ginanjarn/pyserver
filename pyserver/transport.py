@@ -30,12 +30,12 @@ class Transport(ABC):
     """transport abstraction"""
 
     @abstractmethod
-    def listen(self) -> None:
-        """listen client message"""
+    def listen_connection(self) -> None:
+        """wait client connection"""
 
     @abstractmethod
     def terminate(self) -> None:
-        """terminate"""
+        """terminate from client"""
 
     @abstractmethod
     def write(self, data: bytes) -> None:
@@ -52,7 +52,7 @@ class StandardIO(Transport):
     def __init__(self):
         pass
 
-    def listen(self):
+    def listen_connection(self):
         # just wait until terminated
         pass
 

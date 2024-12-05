@@ -7,47 +7,49 @@ class ContentIncomplete(ValueError):
     """expected size less than defined"""
 
 
-class BaseRPCError(Exception):
-    code = -1
-    message = "error"
+class RPCException(Exception):
+    """base rpc exception"""
+
+    code = 0
+    message = ""
 
 
-class ParseError(BaseRPCError):
+class ParseError(RPCException):
     """message not comply to jsonrpc 2.0 specification"""
 
     code = -32700
     message = "parse error"
 
 
-class InvalidRequest(BaseRPCError):
+class InvalidRequest(RPCException):
     """invalid request"""
 
     code = -32600
     message = "invalid request"
 
 
-class MethodNotFound(BaseRPCError):
+class MethodNotFound(RPCException):
     """method not found"""
 
     code = -32601
     message = "method not found"
 
 
-class InvalidParams(BaseRPCError):
+class InvalidParams(RPCException):
     """invalid params"""
 
     code = -32602
     message = "invalid params"
 
 
-class InternalError(BaseRPCError):
+class InternalError(RPCException):
     """internal error"""
 
     code = -32603
     message = "internal error"
 
 
-class ServerNotInitialized(BaseRPCError):
+class ServerNotInitialized(RPCException):
     """workspace not initialize"""
 
     code = -32002
@@ -60,16 +62,18 @@ class InvalidResource(InternalError):
     message = "invalid resource"
 
 
-class RequestCanceled(InternalError):
+class RequestCancelled(RPCException):
     """request canceled"""
 
     message = "request canceled"
+    code = -32800
 
 
-class ContentModified(InternalError):
+class ContentModified(RPCException):
     """content modified"""
 
     message = "content modified"
+    code = -32801
 
 
 class FeatureDisabled(InternalError):
@@ -79,16 +83,21 @@ class FeatureDisabled(InternalError):
 
 
 def transform_error(
-    err: Union[BaseRPCError, Exception, None]
+    error: Union[RPCException, Exception, None]
 ) -> Optional[Dict[str, Any]]:
     """transform exception to rpc error"""
 
-    if not err:
+    if not error:
         return None
 
+    code, message = None, None
     try:
-        return {"code": err.code, "message": str(err) or err.message}
+        code = error.code
+        message = str(error) or error.message
 
     except AttributeError:
         # 'err.code' and 'err.message' may be not defined
-        return {"code": InternalError.code, "message": repr(err)}
+        code = InternalError.code
+        message = repr(error)
+
+    return {"code": code, "message": message}

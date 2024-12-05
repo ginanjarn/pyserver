@@ -15,13 +15,13 @@ LOGGER = logging.getLogger("pyserver")
 
 
 @dataclass
-class RequestData:
-    id_: int
+class RequestCommand:
+    id: int
     method: str
     params: dict
 
 
-class RequestHandler:
+class RequestManager:
     """RequestHandler executed outside main loop to make request cancelable"""
 
     def __init__(
@@ -32,17 +32,14 @@ class RequestHandler:
         self.request_queue = queue.Queue()
         self.canceled_requests = set()
 
-        self.cancel_lock = threading.Lock()
-
-        self.current_id = -1
+        self.cancel_lock = threading.RLock()
         self.in_process_id = -1
 
         self.handle_function = handle_function
         self.response_callback = response_callback
 
-    def add(self, request_id, method, params):
-        self.current_id = request_id
-        self.request_queue.put(RequestData(request_id, method, params))
+    def add(self, request_id: int, method: str, params: dict):
+        self.request_queue.put(RequestCommand(request_id, method, params))
 
     def cancel(self, request_id: int):
         with self.cancel_lock:
@@ -50,33 +47,36 @@ class RequestHandler:
 
     def cancel_all(self):
         with self.cancel_lock:
-            self.canceled_requests.update(
-                range(self.in_process_id, self.current_id + 1)
-            )
+            self.cancel(self.in_process_id)
+
+            # detach 'request_queue'
+            while not self.request_queue.empty():
+                self.request_queue.get_nowait()
 
     def check_canceled(self, request_id: int):
         # 'canceled_requests' data may be changed during iteration
         with self.cancel_lock:
             if request_id in self.canceled_requests:
-                raise errors.RequestCanceled(f'request canceled "{request_id}"')
+                raise errors.RequestCancelled(f'request canceled "{request_id}"')
 
-    def handle(self, request: RequestData):
+    def handle(self, request: RequestCommand):
         result, error = None, None
 
         try:
             # Check request cancelation before and after exec command
-            self.check_canceled(request.id_)
-            self.in_process_id = request.id_
+            self.check_canceled(request.id)
+            self.in_process_id = request.id
             result = self.handle_function(request.method, request.params)
-            self.check_canceled(request.id_)
+            self.check_canceled(request.id)
 
-        except errors.RequestCanceled as err:
-            self.canceled_requests.remove(request.id_)
+        except errors.RequestCancelled as err:
+            self.canceled_requests.remove(request.id)
             error = err
 
         except (
             errors.InvalidParams,
             errors.ContentModified,
+            errors.InvalidResource,
             errors.MethodNotFound,
         ) as err:
             error = err
@@ -85,12 +85,11 @@ class RequestHandler:
             LOGGER.error("Error handle request: '%s'", err, exc_info=True)
             error = errors.InternalError(err)
 
-        self.response_callback(request.id_, result, errors.transform_error(error))
+        self.response_callback(request.id, result, errors.transform_error(error))
 
     def _run_task(self):
-        while True:
-            message = self.request_queue.get()
-            self.handle(message)
+        while request := self.request_queue.get():
+            self.handle(request)
 
     def run(self):
         thread = threading.Thread(target=self._run_task, daemon=True)
@@ -103,27 +102,28 @@ class ServerRequestManager:
     def __init__(self):
         self.request_id = -1
         self.method = ""
+        self._is_waiting_response = False
 
     def is_waiting_response(self) -> bool:
         """"""
-        return bool(self.method)
+        return self._is_waiting_response
 
-    def add_method(self, method: str) -> int:
+    def add(self, method: str) -> int:
         """return request id for added method"""
 
         self.method = method
         self.request_id += 1
+        self._is_waiting_response = True
         return self.request_id
 
-    def get_method(self, message_id: int) -> str:
+    def get(self, message_id: int) -> str:
         """get method for response id"""
 
         if message_id != self.request_id:
             raise ValueError(f"invalid response for request ({self.request_id})")
 
-        temp = self.method
-        self.method = ""
-        return temp
+        self._is_waiting_response = False
+        return self.method
 
 
 class LSPServer:
@@ -134,16 +134,16 @@ class LSPServer:
         self.handler = handler
 
         # client request handler
-        self.request_handler = RequestHandler(self.handler.handle, self.send_response)
-        self.request_manager = ServerRequestManager()
+        self.request_manager = RequestManager(self.handler.handle, self.send_response)
+        self.server_request_manager = ServerRequestManager()
 
     def send_message(self, message: RPCMessage):
         LOGGER.debug("Send >> %s", message)
-        content = message.to_bytes()
+        content = message.dumps(as_bytes=True)
         self.transport.write(content)
 
     def send_request(self, method: str, params: Any):
-        request_id = self.request_manager.add_method(method)
+        request_id = self.server_request_manager.add(method)
         self.send_message(RPCMessage.request(request_id, method, params))
 
     def send_response(
@@ -155,13 +155,19 @@ class LSPServer:
         self.send_message(RPCMessage.notification(method, params))
 
     def listen(self):
-        """listen remote"""
+        """listen client message"""
 
-        self.request_handler.run()
-        # listen() must not blocking
-        threading.Thread(target=self.transport.listen, daemon=True).start()
+        self.transport.listen_connection()
+        self.request_manager.run()
 
-        self._listen_message()
+        try:
+            self._listen_message()
+
+        except Exception as err:
+            self.send_notification(
+                "window/logMessage", {"type": 1, "message": repr(err)}
+            )
+        self.shutdown()
 
     def shutdown(self):
         """shutdown server"""
@@ -174,25 +180,12 @@ class LSPServer:
             try:
                 content = self.transport.read()
             except EOFError:
-                self.transport.terminate()
+                return
 
-            try:
-                message = RPCMessage.from_bytes(content)
-                LOGGER.debug("Received << %s", message)
+            message = RPCMessage.loads(content)
+            LOGGER.debug("Received << %s", message)
 
-            except Exception as err:
-                LOGGER.error("Error parse message: '%s'", err, exc_info=True)
-                self.transport.terminate()
-
-            try:
-                self.exec_message(message)
-
-            except Exception as err:
-                LOGGER.error("Error handle message: '%s'", err, exc_info=True)
-                self.send_notification(
-                    "window/logMessage", {"type": 1, "message": repr(err)}
-                )
-                self.transport.terminate()
+            self.exec_message(message)
 
     def _publish_diagnostics(self, params: dict):
         try:
@@ -223,7 +216,7 @@ class LSPServer:
             return
 
         if method == "$/cancelRequest":
-            self.request_handler.cancel(params["id"])
+            self.request_manager.cancel(params["id"])
             return
 
         self.handler.handle(method, params)
@@ -233,12 +226,12 @@ class LSPServer:
             "textDocument/didChange",
         }:
             # cancel all current request
-            self.request_handler.cancel_all()
+            self.request_manager.cancel_all()
             # publish diagnostics
             self._publish_diagnostics(params)
 
     def exec_response(self, response: dict):
-        method = self.request_manager.get_method(response["id"])
+        method = self.server_request_manager.get(response["id"])
         self.handler.handle(method, response)
 
     def exec_message(self, message: RPCMessage):
@@ -253,7 +246,7 @@ class LSPServer:
 
         message_id = message.get("id")
 
-        if self.request_manager.is_waiting_response() and message_id is not None:
+        if self.server_request_manager.is_waiting_response() and message_id is not None:
             LOGGER.info("Handle response (%d)", message_id)
             self.exec_response(message.data)
             return
@@ -272,4 +265,4 @@ class LSPServer:
 
         # else:
         LOGGER.info("Handle request (%d)", message_id)
-        self.request_handler.add(message_id, method, params)
+        self.request_manager.add(message_id, method, params)
