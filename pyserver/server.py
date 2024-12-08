@@ -125,6 +125,11 @@ class ServerRequestManager:
         return self.method
 
 
+# Exit code
+EXIT_SUCCESS = 0
+EXIT_ERROR = 1
+
+
 class LSPServer:
     """LSP server"""
 
@@ -166,11 +171,11 @@ class LSPServer:
             self.send_notification(
                 "window/logMessage", {"type": 1, "message": repr(err)}
             )
-        self.shutdown()
+        self.exit(EXIT_ERROR)
 
-    def shutdown(self):
-        """shutdown server"""
-        self.transport.terminate()
+    def exit(self, exit_code: int = 0):
+        """exit server"""
+        self.transport.terminate(exit_code)
 
     def _listen_message(self):
         """listen message"""
@@ -217,7 +222,7 @@ class LSPServer:
         params = message.params
 
         if method == "exit":
-            self.shutdown()
+            self.exit(EXIT_SUCCESS)
             return
 
         if method == "$/cancelRequest":
@@ -242,7 +247,7 @@ class LSPServer:
         method = self.server_request_manager.get(message.id)
         if message.error:
             LOGGER.error("Expected success result for request (%d).", message.id)
-            self.shutdown()
+            self.exit(EXIT_ERROR)
             return
 
         self.handler.handle(method, message)
@@ -261,6 +266,6 @@ class LSPServer:
                 "Response for request (%d) is required.",
                 self.server_request_manager.request_id,
             )
-            self.shutdown()
+            self.exit(EXIT_ERROR)
 
         return exec_map[type(message)](message)

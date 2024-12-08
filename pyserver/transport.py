@@ -59,7 +59,7 @@ class Transport(ABC):
         """wait client connection"""
 
     @abstractmethod
-    def terminate(self) -> None:
+    def terminate(self, exit_code: int = 0) -> None:
         """terminate from client"""
 
     @abstractmethod
@@ -81,9 +81,9 @@ class StandardIO(Transport):
         # just wait until terminated
         pass
 
-    def terminate(self):
+    def terminate(self, exit_code: int = 0) -> None:
         """terminate"""
-        sys.exit(0)
+        sys.exit(exit_code)
 
     def write(self, data: bytes):
         prepared_data = Protocol.dumps(data)
