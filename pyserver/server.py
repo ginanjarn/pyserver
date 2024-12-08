@@ -3,22 +3,21 @@
 import logging
 import queue
 import threading
-from dataclasses import dataclass
 from typing import Optional, Any, Callable
 
 from pyserver import errors
 from pyserver.handler import Handler
-from pyserver.message import RPCMessage
+from pyserver.message import (
+    Message,
+    Notification,
+    Request,
+    Response,
+    dumps,
+    loads,
+)
 from pyserver.transport import Transport
 
 LOGGER = logging.getLogger("pyserver")
-
-
-@dataclass
-class RequestCommand:
-    id: int
-    method: str
-    params: dict
 
 
 class RequestManager:
@@ -38,8 +37,8 @@ class RequestManager:
         self.handle_function = handle_function
         self.response_callback = response_callback
 
-    def add(self, request_id: int, method: str, params: dict):
-        self.request_queue.put(RequestCommand(request_id, method, params))
+    def add(self, message: Request):
+        self.request_queue.put(message)
 
     def cancel(self, request_id: int):
         with self.cancel_lock:
@@ -59,7 +58,7 @@ class RequestManager:
             if request_id in self.canceled_requests:
                 raise errors.RequestCancelled(f'request canceled "{request_id}"')
 
-    def handle(self, request: RequestCommand):
+    def handle(self, request: Request):
         result, error = None, None
 
         try:
@@ -137,22 +136,22 @@ class LSPServer:
         self.request_manager = RequestManager(self.handler.handle, self.send_response)
         self.server_request_manager = ServerRequestManager()
 
-    def send_message(self, message: RPCMessage):
+    def send_message(self, message: Message):
         LOGGER.debug("Send >> %s", message)
-        content = message.dumps(as_bytes=True)
+        content = dumps(message, as_bytes=True)
         self.transport.write(content)
 
     def send_request(self, method: str, params: Any):
         request_id = self.server_request_manager.add(method)
-        self.send_message(RPCMessage.request(request_id, method, params))
+        self.send_message(Request(request_id, method, params))
 
     def send_response(
         self, request_id: int, result: Optional[Any] = None, error: Optional[Any] = None
     ):
-        self.send_message(RPCMessage.response(request_id, result, error))
+        self.send_message(Response(request_id, result, error))
 
     def send_notification(self, method: str, params: Any):
-        self.send_message(RPCMessage.notification(method, params))
+        self.send_message(Notification(method, params))
 
     def listen(self):
         """listen client message"""
@@ -182,9 +181,12 @@ class LSPServer:
             except EOFError:
                 return
 
-            message = RPCMessage.loads(content)
-            LOGGER.debug("Received << %s", message)
+            try:
+                message = loads(content)
+            except ValueError as err:
+                raise errors.ParseError(err) from err
 
+            LOGGER.debug("Received << %s", message)
             self.exec_message(message)
 
     def _publish_diagnostics(self, params: dict):
@@ -210,7 +212,10 @@ class LSPServer:
                 "textDocument/publishDiagnostics", diagnostics_params
             )
 
-    def exec_notification(self, method, params):
+    def exec_notification(self, message: Notification):
+        method = message.method
+        params = message.params
+
         if method == "exit":
             self.shutdown()
             return
@@ -230,39 +235,32 @@ class LSPServer:
             # publish diagnostics
             self._publish_diagnostics(params)
 
-    def exec_response(self, response: dict):
-        method = self.server_request_manager.get(response["id"])
-        self.handler.handle(method, response)
+    def exec_request(self, message: Request):
+        self.request_manager.add(message)
 
-    def exec_message(self, message: RPCMessage):
-        """exec received message"""
-
-        # message characteristic
-        # - notification  : method, params
-        # - request       : id, method, params
-        # - response*     : id, result | error
-        #
-        # * response only have single value of result or error
-
-        message_id = message.get("id")
-
-        if self.server_request_manager.is_waiting_response() and message_id is not None:
-            LOGGER.info("Handle response (%d)", message_id)
-            self.exec_response(message.data)
+    def exec_response(self, message: Response):
+        method = self.server_request_manager.get(message.id)
+        if message.error:
+            LOGGER.error("Expected success result for request (%d).", message.id)
+            self.shutdown()
             return
 
-        method = message.get("method")
-        params = message.get("params")
+        self.handler.handle(method, message)
 
-        if not method:
-            # request or notification message must contain method
-            raise errors.InternalError("Invalid message")
+    def exec_message(self, message: Message) -> Optional[Any]:
+        exec_map = {
+            Notification: self.exec_notification,
+            Request: self.exec_request,
+            Response: self.exec_response,
+        }
+        if (
+            self.server_request_manager.is_waiting_response()
+            and type(message) != Response
+        ):
+            LOGGER.error(
+                "Response for request (%d) is required.",
+                self.server_request_manager.request_id,
+            )
+            self.shutdown()
 
-        if message_id is None:
-            LOGGER.info("Handle notification (%s)", method)
-            self.exec_notification(method, params)
-            return
-
-        # else:
-        LOGGER.info("Handle request (%d)", message_id)
-        self.request_manager.add(message_id, method, params)
+        return exec_map[type(message)](message)
