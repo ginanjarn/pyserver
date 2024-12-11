@@ -45,7 +45,8 @@ def loads(json_str: Union[str, bytes]) -> Message:
         raise ValueError("JSON-RPC 2.0 is required") from err
 
     if dct.get("method"):
-        if (id := dct.get("id")) and id is not None:
+        id = dct.get("id")
+        if id is not None:
             return Request(**dct)
         return Notification(**dct)
     return Response(**dct)
