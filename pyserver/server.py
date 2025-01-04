@@ -125,6 +125,60 @@ class ServerRequestManager:
         return self.method
 
 
+class DiagnosticsPublisher:
+    """"""
+
+    def __init__(
+        self,
+        handle_function: Callable[[str, dict], Any],
+        notification_callback: Callable[[Any, Any], None],
+    ) -> None:
+        self.handle_function = handle_function
+        self.send_notification = notification_callback
+
+        self.event = threading.Event()
+        self.target_params = None
+
+    def publish(self, params: dict) -> None:
+        """"""
+        self.target_params = params
+        self.event.set()
+
+    def run(self) -> None:
+        """"""
+        thread = threading.Thread(target=self._run_task, daemon=True)
+        thread.start()
+
+    def _run_task(self):
+        while True:
+            self.event.wait()
+            self.event.clear()
+            self._publish_diagnostics(self.target_params)
+
+    def _publish_diagnostics(self, params: dict):
+        try:
+            diagnostics_params = self.handle_function(
+                "textDocument/publishDiagnostics", params
+            )
+
+        except (
+            errors.InvalidParams,
+            errors.ContentModified,
+            errors.InvalidResource,
+            errors.MethodNotFound,
+        ):
+            # ignore above exception
+            pass
+
+        except Exception as err:
+            LOGGER.error("Error get diagnostics: '%s'", err, exc_info=True)
+
+        else:
+            self.send_notification(
+                "textDocument/publishDiagnostics", diagnostics_params
+            )
+
+
 # Exit code
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
@@ -140,6 +194,11 @@ class LSPServer:
         # client request handler
         self.request_manager = RequestManager(self.handler.handle, self.send_response)
         self.server_request_manager = ServerRequestManager()
+
+        # diagnostic publisher
+        self.diagnostics_publisher = DiagnosticsPublisher(
+            self.handler.handle, self.send_notification
+        )
 
     def send_message(self, message: Message):
         LOGGER.debug("Send >> %s", message)
@@ -163,6 +222,7 @@ class LSPServer:
 
         self.transport.listen_connection()
         self.request_manager.run()
+        self.diagnostics_publisher.run()
 
         try:
             self._listen_message()
@@ -194,29 +254,6 @@ class LSPServer:
             LOGGER.debug("Received << %s", message)
             self.exec_message(message)
 
-    def _publish_diagnostics(self, params: dict):
-        try:
-            diagnostics_params = self.handler.handle(
-                "textDocument/publishDiagnostics", params
-            )
-
-        except (
-            errors.InvalidParams,
-            errors.ContentModified,
-            errors.InvalidResource,
-            errors.MethodNotFound,
-        ):
-            # ignore above exception
-            pass
-
-        except Exception as err:
-            LOGGER.error("Error get diagnostics: '%s'", err, exc_info=True)
-
-        else:
-            self.send_notification(
-                "textDocument/publishDiagnostics", diagnostics_params
-            )
-
     def exec_notification(self, message: Notification):
         method = message.method
         params = message.params
@@ -238,7 +275,7 @@ class LSPServer:
             # cancel all current request
             self.request_manager.cancel_all()
             # publish diagnostics
-            self._publish_diagnostics(params)
+            self.diagnostics_publisher.publish(params)
 
     def exec_request(self, message: Request):
         self.request_manager.add(message)
