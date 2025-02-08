@@ -39,7 +39,7 @@ except ImportError:
 
 
 class Manager:
-    def __init__(self, elements: Any) -> None:
+    def __init__(self, elements: List[Any]) -> None:
         self._elements = elements
         self._dependency_map = {}
 

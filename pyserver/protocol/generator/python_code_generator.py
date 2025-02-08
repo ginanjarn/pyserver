@@ -2,8 +2,8 @@ import keyword
 import re
 from collections import defaultdict
 from functools import partial
-from textwrap import indent, dedent
-from typing import Any
+from textwrap import indent
+from typing import Any, List
 
 try:
     from models import (
@@ -71,7 +71,7 @@ DocumentUri = URI
 
 
 class Generator:
-    def __init__(self, elements: Any) -> None:
+    def __init__(self, elements: List[Any]) -> None:
         self._elements = elements
 
     def generate(self) -> str:
