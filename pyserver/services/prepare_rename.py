@@ -7,10 +7,8 @@ from typing import Dict, Any, Optional
 from jedi import Script, Project
 
 from pyserver import errors
-from pyserver.workspace import (
-    Workspace,
-    uri_to_path,
-)
+from pyserver.uri import uri_to_path
+from pyserver.workspace import Workspace
 
 
 @dataclass

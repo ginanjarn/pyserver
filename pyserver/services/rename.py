@@ -7,13 +7,9 @@ from jedi import Script, Project
 from jedi.api.refactoring import Refactoring, RefactoringError
 
 from pyserver import errors
+from pyserver.uri import uri_to_path, path_to_uri
 from pyserver.services import diffutils
-from pyserver.workspace import (
-    Document,
-    Workspace,
-    uri_to_path,
-    path_to_uri,
-)
+from pyserver.workspace import Document, Workspace
 
 
 @dataclass

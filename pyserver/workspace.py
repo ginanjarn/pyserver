@@ -1,36 +1,12 @@
 """workspace objects"""
 
-__all__ = ["DocumentURI", "Document", "Workspace", "path_to_uri", "uri_to_path"]
+__all__ = ["Document", "Workspace"]
 
-from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict
-from urllib.parse import urlparse, unquote_plus
-from urllib.request import url2pathname
 
 from pyserver import errors
-
-
-DocumentURI = str
-"""Uniform Resource Identifier.
-See 'RFC 3986' specification.
-"""
-
-
-@lru_cache(128)
-def path_to_uri(path: Path) -> DocumentURI:
-    """convert path to uri"""
-    return Path(path).as_uri()
-
-
-@lru_cache(128)
-def uri_to_path(uri: DocumentURI) -> Path:
-    """convert uri to path"""
-    parsed = urlparse(uri)
-    if parsed.scheme != "file":
-        raise ValueError("url scheme must be 'file'")
-
-    return Path(url2pathname(unquote_plus(parsed.path)))
+from pyserver.uri import path_to_uri
 
 
 class Document:

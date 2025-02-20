@@ -10,10 +10,8 @@ from jedi import Script, Project
 from jedi.api.classes import Name
 
 from pyserver import errors
-from pyserver.workspace import (
-    Workspace,
-    uri_to_path,
-)
+from pyserver.uri import uri_to_path
+from pyserver.workspace import Workspace
 
 
 @dataclass

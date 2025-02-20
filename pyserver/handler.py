@@ -5,7 +5,8 @@ from functools import wraps
 from typing import Callable, Dict, Any, Optional
 
 from pyserver import errors
-from pyserver.workspace import Workspace, uri_to_path
+from pyserver.uri import uri_to_path
+from pyserver.workspace import Workspace
 
 
 class Handler(ABC):

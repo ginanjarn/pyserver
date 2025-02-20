@@ -10,10 +10,8 @@ from jedi.api.classes import Completion
 from parso.tree import Leaf
 
 from pyserver import errors
-from pyserver.workspace import (
-    Workspace,
-    uri_to_path,
-)
+from pyserver.uri import uri_to_path
+from pyserver.workspace import Workspace
 
 
 @dataclass

@@ -9,11 +9,8 @@ from typing import Dict, Any, Iterator, Iterable
 from pyflakes import checker
 
 from pyserver import errors
-from pyserver.workspace import (
-    Workspace,
-    uri_to_path,
-    path_to_uri,
-)
+from pyserver.uri import uri_to_path, path_to_uri
+from pyserver.workspace import Workspace
 
 
 @dataclass
