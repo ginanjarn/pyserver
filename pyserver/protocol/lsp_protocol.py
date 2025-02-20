@@ -10,11 +10,12 @@
 
 from dataclasses import dataclass, field
 from functools import partial
-from typing import List, Tuple, Dict, Union, Literal
+from typing import List, Tuple, Dict, Union, Literal, Any, Optional
 
 
 optional_field = partial(field, metadata={"optional": True})
 """optional field"""
+
 uint = int
 """unsigned type compatibility"""
 URI = str
@@ -22,6 +23,41 @@ URI = str
 See https://tools.ietf.org/html/rfc3986"""
 DocumentUri = URI
 """URI with scheme = 'file'"""
+Session = Any
+"""Session data manager
+TODO: define Session class implementation."""
+
+
+@dataclass
+class Message:
+    jsonrpc: str
+
+
+@dataclass
+class RequestMessage(Message):
+    id: int
+    method: str
+    params: Optional[Any] = optional_field(default=None)
+
+
+@dataclass
+class ResponseError:
+    code: int
+    message: str
+    data: Optional[Any] = optional_field(default=None)
+
+
+@dataclass
+class ResponseMessage(Message):
+    id: int
+    result: Optional[Any] = optional_field(default=None)
+    error: Optional[ResponseError] = optional_field(default=None)
+
+
+@dataclass
+class NotificationMessage(Message):
+    method: str
+    params: Optional[Any] = optional_field(default=None)
 
 
 SemanticTokenTypes = str
@@ -5405,3 +5441,1171 @@ pull request.
 @since 3.17.0"""
 
 PrepareRenameResult = "Union[Range, PrepareRenamePlaceholder, PrepareRenameDefaultBehavior]"
+
+@dataclass
+class ImplementationRequestResult(ResponseMessage):
+	result: Union[Definition, List[DefinitionLink], None]
+
+class ImplementationRequest:
+	"""A request to resolve the implementation locations of a symbol at a given text
+	document position. The request's parameter is of type {@link TextDocumentPositionParams}
+	the response is of type {@link Definition} or a Thenable that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = ImplementationRegistrationOptions
+	method = "textDocument/implementation"
+	params_type = ImplementationParams
+	result_type = ImplementationRequestResult
+
+@dataclass
+class TypeDefinitionRequestResult(ResponseMessage):
+	result: Union[Definition, List[DefinitionLink], None]
+
+class TypeDefinitionRequest:
+	"""A request to resolve the type definition locations of a symbol at a given text
+	document position. The request's parameter is of type {@link TextDocumentPositionParams}
+	the response is of type {@link Definition} or a Thenable that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = TypeDefinitionRegistrationOptions
+	method = "textDocument/typeDefinition"
+	params_type = TypeDefinitionParams
+	result_type = TypeDefinitionRequestResult
+
+@dataclass
+class WorkspaceFoldersRequestResult(ResponseMessage):
+	result: Union[List[WorkspaceFolder], None]
+
+class WorkspaceFoldersRequest:
+	"""The `workspace/workspaceFolders` is sent from the server to the client to fetch the open workspace folders."""
+	message_direction: str = "serverToClient"
+	method = "workspace/workspaceFolders"
+	params_type = None
+	result_type = WorkspaceFoldersRequestResult
+
+@dataclass
+class ConfigurationRequestResult(ResponseMessage):
+	result: List[LSPAny]
+
+class ConfigurationRequest:
+	"""The 'workspace/configuration' request is sent from the server to the client to fetch a certain
+	configuration setting.
+
+	This pull model replaces the old push model were the client signaled configuration change via an
+	event. If the server still needs to react to configuration changes (since the server caches the
+	result of `workspace/configuration` requests) the server should register for an empty configuration
+	change event and empty the cache if such an event is received."""
+	message_direction: str = "serverToClient"
+	method = "workspace/configuration"
+	params_type = ConfigurationParams
+	result_type = ConfigurationRequestResult
+
+@dataclass
+class DocumentColorRequestResult(ResponseMessage):
+	result: List[ColorInformation]
+
+class DocumentColorRequest:
+	"""A request to list all color symbols found in a given text document. The request's
+	parameter is of type {@link DocumentColorParams} the
+	response is of type {@link ColorInformation ColorInformation[]} or a Thenable
+	that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = DocumentColorRegistrationOptions
+	method = "textDocument/documentColor"
+	params_type = DocumentColorParams
+	result_type = DocumentColorRequestResult
+
+@dataclass
+class ColorPresentationRequestResult(ResponseMessage):
+	result: List[ColorPresentation]
+
+class ColorPresentationRequest:
+	"""A request to list all presentation for a color. The request's
+	parameter is of type {@link ColorPresentationParams} the
+	response is of type {@link ColorInformation ColorInformation[]} or a Thenable
+	that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = Union[WorkDoneProgressOptions, TextDocumentRegistrationOptions]
+	method = "textDocument/colorPresentation"
+	params_type = ColorPresentationParams
+	result_type = ColorPresentationRequestResult
+
+@dataclass
+class FoldingRangeRequestResult(ResponseMessage):
+	result: Union[List[FoldingRange], None]
+
+class FoldingRangeRequest:
+	"""A request to provide folding ranges in a document. The request's
+	parameter is of type {@link FoldingRangeParams}, the
+	response is of type {@link FoldingRangeList} or a Thenable
+	that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = FoldingRangeRegistrationOptions
+	method = "textDocument/foldingRange"
+	params_type = FoldingRangeParams
+	result_type = FoldingRangeRequestResult
+
+@dataclass
+class FoldingRangeRefreshRequestResult(ResponseMessage):
+	result: None
+
+class FoldingRangeRefreshRequest:
+	"""@since 3.18.0
+	@proposed"""
+	message_direction: str = "serverToClient"
+	method = "workspace/foldingRange/refresh"
+	params_type = None
+	result_type = FoldingRangeRefreshRequestResult
+
+@dataclass
+class DeclarationRequestResult(ResponseMessage):
+	result: Union[Declaration, List[DeclarationLink], None]
+
+class DeclarationRequest:
+	"""A request to resolve the type definition locations of a symbol at a given text
+	document position. The request's parameter is of type {@link TextDocumentPositionParams}
+	the response is of type {@link Declaration} or a typed array of {@link DeclarationLink}
+	or a Thenable that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = DeclarationRegistrationOptions
+	method = "textDocument/declaration"
+	params_type = DeclarationParams
+	result_type = DeclarationRequestResult
+
+@dataclass
+class SelectionRangeRequestResult(ResponseMessage):
+	result: Union[List[SelectionRange], None]
+
+class SelectionRangeRequest:
+	"""A request to provide selection ranges in a document. The request's
+	parameter is of type {@link SelectionRangeParams}, the
+	response is of type {@link SelectionRange SelectionRange[]} or a Thenable
+	that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = SelectionRangeRegistrationOptions
+	method = "textDocument/selectionRange"
+	params_type = SelectionRangeParams
+	result_type = SelectionRangeRequestResult
+
+@dataclass
+class WorkDoneProgressCreateRequestResult(ResponseMessage):
+	result: None
+
+class WorkDoneProgressCreateRequest:
+	"""The `window/workDoneProgress/create` request is sent from the server to the client to initiate progress
+	reporting from the server."""
+	message_direction: str = "serverToClient"
+	method = "window/workDoneProgress/create"
+	params_type = WorkDoneProgressCreateParams
+	result_type = WorkDoneProgressCreateRequestResult
+
+@dataclass
+class CallHierarchyPrepareRequestResult(ResponseMessage):
+	result: Union[List[CallHierarchyItem], None]
+
+class CallHierarchyPrepareRequest:
+	"""A request to result a `CallHierarchyItem` in a document at a given position.
+	Can be used as an input to an incoming or outgoing call hierarchy.
+
+	@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = CallHierarchyRegistrationOptions
+	method = "textDocument/prepareCallHierarchy"
+	params_type = CallHierarchyPrepareParams
+	result_type = CallHierarchyPrepareRequestResult
+
+@dataclass
+class CallHierarchyIncomingCallsRequestResult(ResponseMessage):
+	result: Union[List[CallHierarchyIncomingCall], None]
+
+class CallHierarchyIncomingCallsRequest:
+	"""A request to resolve the incoming calls for a given `CallHierarchyItem`.
+
+	@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	method = "callHierarchy/incomingCalls"
+	params_type = CallHierarchyIncomingCallsParams
+	result_type = CallHierarchyIncomingCallsRequestResult
+
+@dataclass
+class CallHierarchyOutgoingCallsRequestResult(ResponseMessage):
+	result: Union[List[CallHierarchyOutgoingCall], None]
+
+class CallHierarchyOutgoingCallsRequest:
+	"""A request to resolve the outgoing calls for a given `CallHierarchyItem`.
+
+	@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	method = "callHierarchy/outgoingCalls"
+	params_type = CallHierarchyOutgoingCallsParams
+	result_type = CallHierarchyOutgoingCallsRequestResult
+
+@dataclass
+class SemanticTokensRequestResult(ResponseMessage):
+	result: Union[SemanticTokens, None]
+
+class SemanticTokensRequest:
+	"""@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_method = "textDocument/semanticTokens"
+	registration_options_type = SemanticTokensRegistrationOptions
+	method = "textDocument/semanticTokens/full"
+	params_type = SemanticTokensParams
+	result_type = SemanticTokensRequestResult
+
+@dataclass
+class SemanticTokensDeltaRequestResult(ResponseMessage):
+	result: Union[SemanticTokens, SemanticTokensDelta, None]
+
+class SemanticTokensDeltaRequest:
+	"""@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_method = "textDocument/semanticTokens"
+	registration_options_type = SemanticTokensRegistrationOptions
+	method = "textDocument/semanticTokens/full/delta"
+	params_type = SemanticTokensDeltaParams
+	result_type = SemanticTokensDeltaRequestResult
+
+@dataclass
+class SemanticTokensRangeRequestResult(ResponseMessage):
+	result: Union[SemanticTokens, None]
+
+class SemanticTokensRangeRequest:
+	"""@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_method = "textDocument/semanticTokens"
+	method = "textDocument/semanticTokens/range"
+	params_type = SemanticTokensRangeParams
+	result_type = SemanticTokensRangeRequestResult
+
+@dataclass
+class SemanticTokensRefreshRequestResult(ResponseMessage):
+	result: None
+
+class SemanticTokensRefreshRequest:
+	"""@since 3.16.0"""
+	message_direction: str = "serverToClient"
+	method = "workspace/semanticTokens/refresh"
+	params_type = None
+	result_type = SemanticTokensRefreshRequestResult
+
+@dataclass
+class ShowDocumentRequestResult(ResponseMessage):
+	result: ShowDocumentResult
+
+class ShowDocumentRequest:
+	"""A request to show a document. This request might open an
+	external program depending on the value of the URI to open.
+	For example a request to open `https://code.visualstudio.com/`
+	will very likely open the URI in a WEB browser.
+
+	@since 3.16.0"""
+	message_direction: str = "serverToClient"
+	method = "window/showDocument"
+	params_type = ShowDocumentParams
+	result_type = ShowDocumentRequestResult
+
+@dataclass
+class LinkedEditingRangeRequestResult(ResponseMessage):
+	result: Union[LinkedEditingRanges, None]
+
+class LinkedEditingRangeRequest:
+	"""A request to provide ranges that can be edited together.
+
+	@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = LinkedEditingRangeRegistrationOptions
+	method = "textDocument/linkedEditingRange"
+	params_type = LinkedEditingRangeParams
+	result_type = LinkedEditingRangeRequestResult
+
+@dataclass
+class WillCreateFilesRequestResult(ResponseMessage):
+	result: Union[WorkspaceEdit, None]
+
+class WillCreateFilesRequest:
+	"""The will create files request is sent from the client to the server before files are actually
+	created as long as the creation is triggered from within the client.
+
+	The request can return a `WorkspaceEdit` which will be applied to workspace before the
+	files are created. Hence the `WorkspaceEdit` can not manipulate the content of the file
+	to be created.
+
+	@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = FileOperationRegistrationOptions
+	method = "workspace/willCreateFiles"
+	params_type = CreateFilesParams
+	result_type = WillCreateFilesRequestResult
+
+@dataclass
+class WillRenameFilesRequestResult(ResponseMessage):
+	result: Union[WorkspaceEdit, None]
+
+class WillRenameFilesRequest:
+	"""The will rename files request is sent from the client to the server before files are actually
+	renamed as long as the rename is triggered from within the client.
+
+	@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = FileOperationRegistrationOptions
+	method = "workspace/willRenameFiles"
+	params_type = RenameFilesParams
+	result_type = WillRenameFilesRequestResult
+
+@dataclass
+class WillDeleteFilesRequestResult(ResponseMessage):
+	result: Union[WorkspaceEdit, None]
+
+class WillDeleteFilesRequest:
+	"""The did delete files notification is sent from the client to the server when
+	files were deleted from within the client.
+
+	@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = FileOperationRegistrationOptions
+	method = "workspace/willDeleteFiles"
+	params_type = DeleteFilesParams
+	result_type = WillDeleteFilesRequestResult
+
+@dataclass
+class MonikerRequestResult(ResponseMessage):
+	result: Union[List[Moniker], None]
+
+class MonikerRequest:
+	"""A request to get the moniker of a symbol at a given text document position.
+	The request parameter is of type {@link TextDocumentPositionParams}.
+	The response is of type {@link Moniker Moniker[]} or `null`."""
+	message_direction: str = "clientToServer"
+	registration_options_type = MonikerRegistrationOptions
+	method = "textDocument/moniker"
+	params_type = MonikerParams
+	result_type = MonikerRequestResult
+
+@dataclass
+class TypeHierarchyPrepareRequestResult(ResponseMessage):
+	result: Union[List[TypeHierarchyItem], None]
+
+class TypeHierarchyPrepareRequest:
+	"""A request to result a `TypeHierarchyItem` in a document at a given position.
+	Can be used as an input to a subtypes or supertypes type hierarchy.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = TypeHierarchyRegistrationOptions
+	method = "textDocument/prepareTypeHierarchy"
+	params_type = TypeHierarchyPrepareParams
+	result_type = TypeHierarchyPrepareRequestResult
+
+@dataclass
+class TypeHierarchySupertypesRequestResult(ResponseMessage):
+	result: Union[List[TypeHierarchyItem], None]
+
+class TypeHierarchySupertypesRequest:
+	"""A request to resolve the supertypes for a given `TypeHierarchyItem`.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	method = "typeHierarchy/supertypes"
+	params_type = TypeHierarchySupertypesParams
+	result_type = TypeHierarchySupertypesRequestResult
+
+@dataclass
+class TypeHierarchySubtypesRequestResult(ResponseMessage):
+	result: Union[List[TypeHierarchyItem], None]
+
+class TypeHierarchySubtypesRequest:
+	"""A request to resolve the subtypes for a given `TypeHierarchyItem`.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	method = "typeHierarchy/subtypes"
+	params_type = TypeHierarchySubtypesParams
+	result_type = TypeHierarchySubtypesRequestResult
+
+@dataclass
+class InlineValueRequestResult(ResponseMessage):
+	result: Union[List[InlineValue], None]
+
+class InlineValueRequest:
+	"""A request to provide inline values in a document. The request's parameter is of
+	type {@link InlineValueParams}, the response is of type
+	{@link InlineValue InlineValue[]} or a Thenable that resolves to such.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = InlineValueRegistrationOptions
+	method = "textDocument/inlineValue"
+	params_type = InlineValueParams
+	result_type = InlineValueRequestResult
+
+@dataclass
+class InlineValueRefreshRequestResult(ResponseMessage):
+	result: None
+
+class InlineValueRefreshRequest:
+	"""@since 3.17.0"""
+	message_direction: str = "serverToClient"
+	method = "workspace/inlineValue/refresh"
+	params_type = None
+	result_type = InlineValueRefreshRequestResult
+
+@dataclass
+class InlayHintRequestResult(ResponseMessage):
+	result: Union[List[InlayHint], None]
+
+class InlayHintRequest:
+	"""A request to provide inlay hints in a document. The request's parameter is of
+	type {@link InlayHintsParams}, the response is of type
+	{@link InlayHint InlayHint[]} or a Thenable that resolves to such.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = InlayHintRegistrationOptions
+	method = "textDocument/inlayHint"
+	params_type = InlayHintParams
+	result_type = InlayHintRequestResult
+
+@dataclass
+class InlayHintResolveRequestResult(ResponseMessage):
+	result: InlayHint
+
+class InlayHintResolveRequest:
+	"""A request to resolve additional properties for an inlay hint.
+	The request's parameter is of type {@link InlayHint}, the response is
+	of type {@link InlayHint} or a Thenable that resolves to such.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	method = "inlayHint/resolve"
+	params_type = InlayHint
+	result_type = InlayHintResolveRequestResult
+
+@dataclass
+class InlayHintRefreshRequestResult(ResponseMessage):
+	result: None
+
+class InlayHintRefreshRequest:
+	"""@since 3.17.0"""
+	message_direction: str = "serverToClient"
+	method = "workspace/inlayHint/refresh"
+	params_type = None
+	result_type = InlayHintRefreshRequestResult
+
+@dataclass
+class DocumentDiagnosticRequestResult(ResponseMessage):
+	result: DocumentDiagnosticReport
+
+class DocumentDiagnosticRequest:
+	"""The document diagnostic request definition.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = DiagnosticRegistrationOptions
+	method = "textDocument/diagnostic"
+	params_type = DocumentDiagnosticParams
+	result_type = DocumentDiagnosticRequestResult
+
+@dataclass
+class WorkspaceDiagnosticRequestResult(ResponseMessage):
+	result: WorkspaceDiagnosticReport
+
+class WorkspaceDiagnosticRequest:
+	"""The workspace diagnostic request definition.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	method = "workspace/diagnostic"
+	params_type = WorkspaceDiagnosticParams
+	result_type = WorkspaceDiagnosticRequestResult
+
+@dataclass
+class DiagnosticRefreshRequestResult(ResponseMessage):
+	result: None
+
+class DiagnosticRefreshRequest:
+	"""The diagnostic refresh request definition.
+
+	@since 3.17.0"""
+	message_direction: str = "serverToClient"
+	method = "workspace/diagnostic/refresh"
+	params_type = None
+	result_type = DiagnosticRefreshRequestResult
+
+@dataclass
+class InlineCompletionRequestResult(ResponseMessage):
+	result: Union[InlineCompletionList, List[InlineCompletionItem], None]
+
+class InlineCompletionRequest:
+	"""A request to provide inline completions in a document. The request's parameter is of
+	type {@link InlineCompletionParams}, the response is of type
+	{@link InlineCompletion InlineCompletion[]} or a Thenable that resolves to such.
+
+	@since 3.18.0
+	@proposed"""
+	message_direction: str = "clientToServer"
+	registration_options_type = InlineCompletionRegistrationOptions
+	method = "textDocument/inlineCompletion"
+	params_type = InlineCompletionParams
+	result_type = InlineCompletionRequestResult
+
+@dataclass
+class TextDocumentContentRequestResult(ResponseMessage):
+	result: str
+
+class TextDocumentContentRequest:
+	"""The `workspace/textDocumentContent` request is sent from the client to the
+	server to request the content of a text document.
+
+	@since 3.18.0
+	@proposed"""
+	message_direction: str = "clientToServer"
+	registration_options_type = TextDocumentContentRegistrationOptions
+	method = "workspace/textDocumentContent"
+	params_type = TextDocumentContentParams
+	result_type = TextDocumentContentRequestResult
+
+@dataclass
+class TextDocumentContentRefreshRequestResult(ResponseMessage):
+	result: None
+
+class TextDocumentContentRefreshRequest:
+	"""The `workspace/textDocumentContent` request is sent from the server to the client to refresh
+	the content of a specific text document.
+
+	@since 3.18.0
+	@proposed"""
+	message_direction: str = "serverToClient"
+	method = "workspace/textDocumentContent/refresh"
+	params_type = TextDocumentContentRefreshParams
+	result_type = TextDocumentContentRefreshRequestResult
+
+@dataclass
+class RegistrationRequestResult(ResponseMessage):
+	result: None
+
+class RegistrationRequest:
+	"""The `client/registerCapability` request is sent from the server to the client to register a new capability
+	handler on the client side."""
+	message_direction: str = "serverToClient"
+	method = "client/registerCapability"
+	params_type = RegistrationParams
+	result_type = RegistrationRequestResult
+
+@dataclass
+class UnregistrationRequestResult(ResponseMessage):
+	result: None
+
+class UnregistrationRequest:
+	"""The `client/unregisterCapability` request is sent from the server to the client to unregister a previously registered capability
+	handler on the client side."""
+	message_direction: str = "serverToClient"
+	method = "client/unregisterCapability"
+	params_type = UnregistrationParams
+	result_type = UnregistrationRequestResult
+
+@dataclass
+class InitializeRequestResult(ResponseMessage):
+	result: InitializeResult
+
+class InitializeRequest:
+	"""The initialize request is sent from the client to the server.
+	It is sent once as the request after starting up the server.
+	The requests parameter is of type {@link InitializeParams}
+	the response if of type {@link InitializeResult} of a Thenable that
+	resolves to such."""
+	message_direction: str = "clientToServer"
+	method = "initialize"
+	params_type = InitializeParams
+	result_type = InitializeRequestResult
+
+@dataclass
+class ShutdownRequestResult(ResponseMessage):
+	result: None
+
+class ShutdownRequest:
+	"""A shutdown request is sent from the client to the server.
+	It is sent once when the client decides to shutdown the
+	server. The only notification that is sent after a shutdown request
+	is the exit event."""
+	message_direction: str = "clientToServer"
+	method = "shutdown"
+	params_type = None
+	result_type = ShutdownRequestResult
+
+@dataclass
+class ShowMessageRequestResult(ResponseMessage):
+	result: Union[MessageActionItem, None]
+
+class ShowMessageRequest:
+	"""The show message request is sent from the server to the client to show a message
+	and a set of options actions to the user."""
+	message_direction: str = "serverToClient"
+	method = "window/showMessageRequest"
+	params_type = ShowMessageRequestParams
+	result_type = ShowMessageRequestResult
+
+@dataclass
+class WillSaveTextDocumentWaitUntilRequestResult(ResponseMessage):
+	result: Union[List[TextEdit], None]
+
+class WillSaveTextDocumentWaitUntilRequest:
+	"""A document will save request is sent from the client to the server before
+	the document is actually saved. The request can return an array of TextEdits
+	which will be applied to the text document before it is saved. Please note that
+	clients might drop results if computing the text edits took too long or if a
+	server constantly fails on this request. This is done to keep the save fast and
+	reliable."""
+	message_direction: str = "clientToServer"
+	registration_options_type = TextDocumentRegistrationOptions
+	method = "textDocument/willSaveWaitUntil"
+	params_type = WillSaveTextDocumentParams
+	result_type = WillSaveTextDocumentWaitUntilRequestResult
+
+@dataclass
+class CompletionRequestResult(ResponseMessage):
+	result: Union[List[CompletionItem], CompletionList, None]
+
+class CompletionRequest:
+	"""Request to request completion at a given text document position. The request's
+	parameter is of type {@link TextDocumentPosition} the response
+	is of type {@link CompletionItem CompletionItem[]} or {@link CompletionList}
+	or a Thenable that resolves to such.
+
+	The request can delay the computation of the {@link CompletionItem.detail `detail`}
+	and {@link CompletionItem.documentation `documentation`} properties to the `completionItem/resolve`
+	request. However, properties that are needed for the initial sorting and filtering, like `sortText`,
+	`filterText`, `insertText`, and `textEdit`, must not be changed during resolve."""
+	message_direction: str = "clientToServer"
+	registration_options_type = CompletionRegistrationOptions
+	method = "textDocument/completion"
+	params_type = CompletionParams
+	result_type = CompletionRequestResult
+
+@dataclass
+class CompletionResolveRequestResult(ResponseMessage):
+	result: CompletionItem
+
+class CompletionResolveRequest:
+	"""Request to resolve additional information for a given completion item.The request's
+	parameter is of type {@link CompletionItem} the response
+	is of type {@link CompletionItem} or a Thenable that resolves to such."""
+	message_direction: str = "clientToServer"
+	method = "completionItem/resolve"
+	params_type = CompletionItem
+	result_type = CompletionResolveRequestResult
+
+@dataclass
+class HoverRequestResult(ResponseMessage):
+	result: Union[Hover, None]
+
+class HoverRequest:
+	"""Request to request hover information at a given text document position. The request's
+	parameter is of type {@link TextDocumentPosition} the response is of
+	type {@link Hover} or a Thenable that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = HoverRegistrationOptions
+	method = "textDocument/hover"
+	params_type = HoverParams
+	result_type = HoverRequestResult
+
+@dataclass
+class SignatureHelpRequestResult(ResponseMessage):
+	result: Union[SignatureHelp, None]
+
+class SignatureHelpRequest:
+	message_direction: str = "clientToServer"
+	registration_options_type = SignatureHelpRegistrationOptions
+	method = "textDocument/signatureHelp"
+	params_type = SignatureHelpParams
+	result_type = SignatureHelpRequestResult
+
+@dataclass
+class DefinitionRequestResult(ResponseMessage):
+	result: Union[Definition, List[DefinitionLink], None]
+
+class DefinitionRequest:
+	"""A request to resolve the definition location of a symbol at a given text
+	document position. The request's parameter is of type {@link TextDocumentPosition}
+	the response is of either type {@link Definition} or a typed array of
+	{@link DefinitionLink} or a Thenable that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = DefinitionRegistrationOptions
+	method = "textDocument/definition"
+	params_type = DefinitionParams
+	result_type = DefinitionRequestResult
+
+@dataclass
+class ReferencesRequestResult(ResponseMessage):
+	result: Union[List[Location], None]
+
+class ReferencesRequest:
+	"""A request to resolve project-wide references for the symbol denoted
+	by the given text document position. The request's parameter is of
+	type {@link ReferenceParams} the response is of type
+	{@link Location Location[]} or a Thenable that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = ReferenceRegistrationOptions
+	method = "textDocument/references"
+	params_type = ReferenceParams
+	result_type = ReferencesRequestResult
+
+@dataclass
+class DocumentHighlightRequestResult(ResponseMessage):
+	result: Union[List[DocumentHighlight], None]
+
+class DocumentHighlightRequest:
+	"""Request to resolve a {@link DocumentHighlight} for a given
+	text document position. The request's parameter is of type {@link TextDocumentPosition}
+	the request response is an array of type {@link DocumentHighlight}
+	or a Thenable that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = DocumentHighlightRegistrationOptions
+	method = "textDocument/documentHighlight"
+	params_type = DocumentHighlightParams
+	result_type = DocumentHighlightRequestResult
+
+@dataclass
+class DocumentSymbolRequestResult(ResponseMessage):
+	result: Union[List[SymbolInformation], List[DocumentSymbol], None]
+
+class DocumentSymbolRequest:
+	"""A request to list all symbols found in a given text document. The request's
+	parameter is of type {@link TextDocumentIdentifier} the
+	response is of type {@link SymbolInformation SymbolInformation[]} or a Thenable
+	that resolves to such."""
+	message_direction: str = "clientToServer"
+	registration_options_type = DocumentSymbolRegistrationOptions
+	method = "textDocument/documentSymbol"
+	params_type = DocumentSymbolParams
+	result_type = DocumentSymbolRequestResult
+
+@dataclass
+class CodeActionRequestResult(ResponseMessage):
+	result: Union[List[Union[Command, CodeAction]], None]
+
+class CodeActionRequest:
+	"""A request to provide commands for the given text document and range."""
+	message_direction: str = "clientToServer"
+	registration_options_type = CodeActionRegistrationOptions
+	method = "textDocument/codeAction"
+	params_type = CodeActionParams
+	result_type = CodeActionRequestResult
+
+@dataclass
+class CodeActionResolveRequestResult(ResponseMessage):
+	result: CodeAction
+
+class CodeActionResolveRequest:
+	"""Request to resolve additional information for a given code action.The request's
+	parameter is of type {@link CodeAction} the response
+	is of type {@link CodeAction} or a Thenable that resolves to such."""
+	message_direction: str = "clientToServer"
+	method = "codeAction/resolve"
+	params_type = CodeAction
+	result_type = CodeActionResolveRequestResult
+
+@dataclass
+class WorkspaceSymbolRequestResult(ResponseMessage):
+	result: Union[List[SymbolInformation], List[WorkspaceSymbol], None]
+
+class WorkspaceSymbolRequest:
+	"""A request to list project-wide symbols matching the query string given
+	by the {@link WorkspaceSymbolParams}. The response is
+	of type {@link SymbolInformation SymbolInformation[]} or a Thenable that
+	resolves to such.
+
+	@since 3.17.0 - support for WorkspaceSymbol in the returned data. Clients
+	 need to advertise support for WorkspaceSymbols via the client capability
+	 `workspace.symbol.resolveSupport`.
+	"""
+	message_direction: str = "clientToServer"
+	registration_options_type = WorkspaceSymbolRegistrationOptions
+	method = "workspace/symbol"
+	params_type = WorkspaceSymbolParams
+	result_type = WorkspaceSymbolRequestResult
+
+@dataclass
+class WorkspaceSymbolResolveRequestResult(ResponseMessage):
+	result: WorkspaceSymbol
+
+class WorkspaceSymbolResolveRequest:
+	"""A request to resolve the range inside the workspace
+	symbol's location.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	method = "workspaceSymbol/resolve"
+	params_type = WorkspaceSymbol
+	result_type = WorkspaceSymbolResolveRequestResult
+
+@dataclass
+class CodeLensRequestResult(ResponseMessage):
+	result: Union[List[CodeLens], None]
+
+class CodeLensRequest:
+	"""A request to provide code lens for the given text document."""
+	message_direction: str = "clientToServer"
+	registration_options_type = CodeLensRegistrationOptions
+	method = "textDocument/codeLens"
+	params_type = CodeLensParams
+	result_type = CodeLensRequestResult
+
+@dataclass
+class CodeLensResolveRequestResult(ResponseMessage):
+	result: CodeLens
+
+class CodeLensResolveRequest:
+	"""A request to resolve a command for a given code lens."""
+	message_direction: str = "clientToServer"
+	method = "codeLens/resolve"
+	params_type = CodeLens
+	result_type = CodeLensResolveRequestResult
+
+@dataclass
+class CodeLensRefreshRequestResult(ResponseMessage):
+	result: None
+
+class CodeLensRefreshRequest:
+	"""A request to refresh all code actions
+
+	@since 3.16.0"""
+	message_direction: str = "serverToClient"
+	method = "workspace/codeLens/refresh"
+	params_type = None
+	result_type = CodeLensRefreshRequestResult
+
+@dataclass
+class DocumentLinkRequestResult(ResponseMessage):
+	result: Union[List[DocumentLink], None]
+
+class DocumentLinkRequest:
+	"""A request to provide document links"""
+	message_direction: str = "clientToServer"
+	registration_options_type = DocumentLinkRegistrationOptions
+	method = "textDocument/documentLink"
+	params_type = DocumentLinkParams
+	result_type = DocumentLinkRequestResult
+
+@dataclass
+class DocumentLinkResolveRequestResult(ResponseMessage):
+	result: DocumentLink
+
+class DocumentLinkResolveRequest:
+	"""Request to resolve additional information for a given document link. The request's
+	parameter is of type {@link DocumentLink} the response
+	is of type {@link DocumentLink} or a Thenable that resolves to such."""
+	message_direction: str = "clientToServer"
+	method = "documentLink/resolve"
+	params_type = DocumentLink
+	result_type = DocumentLinkResolveRequestResult
+
+@dataclass
+class DocumentFormattingRequestResult(ResponseMessage):
+	result: Union[List[TextEdit], None]
+
+class DocumentFormattingRequest:
+	"""A request to format a whole document."""
+	message_direction: str = "clientToServer"
+	registration_options_type = DocumentFormattingRegistrationOptions
+	method = "textDocument/formatting"
+	params_type = DocumentFormattingParams
+	result_type = DocumentFormattingRequestResult
+
+@dataclass
+class DocumentRangeFormattingRequestResult(ResponseMessage):
+	result: Union[List[TextEdit], None]
+
+class DocumentRangeFormattingRequest:
+	"""A request to format a range in a document."""
+	message_direction: str = "clientToServer"
+	registration_options_type = DocumentRangeFormattingRegistrationOptions
+	method = "textDocument/rangeFormatting"
+	params_type = DocumentRangeFormattingParams
+	result_type = DocumentRangeFormattingRequestResult
+
+@dataclass
+class DocumentRangesFormattingRequestResult(ResponseMessage):
+	result: Union[List[TextEdit], None]
+
+class DocumentRangesFormattingRequest:
+	"""A request to format ranges in a document.
+
+	@since 3.18.0
+	@proposed"""
+	message_direction: str = "clientToServer"
+	registration_options_type = DocumentRangeFormattingRegistrationOptions
+	method = "textDocument/rangesFormatting"
+	params_type = DocumentRangesFormattingParams
+	result_type = DocumentRangesFormattingRequestResult
+
+@dataclass
+class DocumentOnTypeFormattingRequestResult(ResponseMessage):
+	result: Union[List[TextEdit], None]
+
+class DocumentOnTypeFormattingRequest:
+	"""A request to format a document on type."""
+	message_direction: str = "clientToServer"
+	registration_options_type = DocumentOnTypeFormattingRegistrationOptions
+	method = "textDocument/onTypeFormatting"
+	params_type = DocumentOnTypeFormattingParams
+	result_type = DocumentOnTypeFormattingRequestResult
+
+@dataclass
+class RenameRequestResult(ResponseMessage):
+	result: Union[WorkspaceEdit, None]
+
+class RenameRequest:
+	"""A request to rename a symbol."""
+	message_direction: str = "clientToServer"
+	registration_options_type = RenameRegistrationOptions
+	method = "textDocument/rename"
+	params_type = RenameParams
+	result_type = RenameRequestResult
+
+@dataclass
+class PrepareRenameRequestResult(ResponseMessage):
+	result: Union[PrepareRenameResult, None]
+
+class PrepareRenameRequest:
+	"""A request to test and perform the setup necessary for a rename.
+
+	@since 3.16 - support for default behavior"""
+	message_direction: str = "clientToServer"
+	method = "textDocument/prepareRename"
+	params_type = PrepareRenameParams
+	result_type = PrepareRenameRequestResult
+
+@dataclass
+class ExecuteCommandRequestResult(ResponseMessage):
+	result: Union[LSPAny, None]
+
+class ExecuteCommandRequest:
+	"""A request send from the client to the server to execute a command. The request might return
+	a workspace edit which the client will apply to the workspace."""
+	message_direction: str = "clientToServer"
+	registration_options_type = ExecuteCommandRegistrationOptions
+	method = "workspace/executeCommand"
+	params_type = ExecuteCommandParams
+	result_type = ExecuteCommandRequestResult
+
+@dataclass
+class ApplyWorkspaceEditRequestResult(ResponseMessage):
+	result: ApplyWorkspaceEditResult
+
+class ApplyWorkspaceEditRequest:
+	"""A request sent from the server to the client to modified certain resources."""
+	message_direction: str = "serverToClient"
+	method = "workspace/applyEdit"
+	params_type = ApplyWorkspaceEditParams
+	result_type = ApplyWorkspaceEditRequestResult
+
+class DidChangeWorkspaceFoldersNotification:
+	"""The `workspace/didChangeWorkspaceFolders` notification is sent from the client to the server when the workspace
+	folder configuration changes."""
+	message_direction: str = "clientToServer"
+	method = "workspace/didChangeWorkspaceFolders"
+	params_type = DidChangeWorkspaceFoldersParams
+
+class WorkDoneProgressCancelNotification:
+	"""The `window/workDoneProgress/cancel` notification is sent from  the client to the server to cancel a progress
+	initiated on the server side."""
+	message_direction: str = "clientToServer"
+	method = "window/workDoneProgress/cancel"
+	params_type = WorkDoneProgressCancelParams
+
+class DidCreateFilesNotification:
+	"""The did create files notification is sent from the client to the server when
+	files were created from within the client.
+
+	@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = FileOperationRegistrationOptions
+	method = "workspace/didCreateFiles"
+	params_type = CreateFilesParams
+
+class DidRenameFilesNotification:
+	"""The did rename files notification is sent from the client to the server when
+	files were renamed from within the client.
+
+	@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = FileOperationRegistrationOptions
+	method = "workspace/didRenameFiles"
+	params_type = RenameFilesParams
+
+class DidDeleteFilesNotification:
+	"""The will delete files request is sent from the client to the server before files are actually
+	deleted as long as the deletion is triggered from within the client.
+
+	@since 3.16.0"""
+	message_direction: str = "clientToServer"
+	registration_options_type = FileOperationRegistrationOptions
+	method = "workspace/didDeleteFiles"
+	params_type = DeleteFilesParams
+
+class DidOpenNotebookDocumentNotification:
+	"""A notification sent when a notebook opens.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	registration_method = "notebookDocument/sync"
+	registration_options_type = NotebookDocumentSyncRegistrationOptions
+	method = "notebookDocument/didOpen"
+	params_type = DidOpenNotebookDocumentParams
+
+class DidChangeNotebookDocumentNotification:
+	message_direction: str = "clientToServer"
+	registration_method = "notebookDocument/sync"
+	registration_options_type = NotebookDocumentSyncRegistrationOptions
+	method = "notebookDocument/didChange"
+	params_type = DidChangeNotebookDocumentParams
+
+class DidSaveNotebookDocumentNotification:
+	"""A notification sent when a notebook document is saved.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	registration_method = "notebookDocument/sync"
+	registration_options_type = NotebookDocumentSyncRegistrationOptions
+	method = "notebookDocument/didSave"
+	params_type = DidSaveNotebookDocumentParams
+
+class DidCloseNotebookDocumentNotification:
+	"""A notification sent when a notebook closes.
+
+	@since 3.17.0"""
+	message_direction: str = "clientToServer"
+	registration_method = "notebookDocument/sync"
+	registration_options_type = NotebookDocumentSyncRegistrationOptions
+	method = "notebookDocument/didClose"
+	params_type = DidCloseNotebookDocumentParams
+
+class InitializedNotification:
+	"""The initialized notification is sent from the client to the
+	server after the client is fully initialized and the server
+	is allowed to send requests from the server to the client."""
+	message_direction: str = "clientToServer"
+	method = "initialized"
+	params_type = InitializedParams
+
+class ExitNotification:
+	"""The exit event is sent from the client to the server to
+	ask the server to exit its process."""
+	message_direction: str = "clientToServer"
+	method = "exit"
+	params_type = None
+
+class DidChangeConfigurationNotification:
+	"""The configuration change notification is sent from the client to the server
+	when the client's configuration has changed. The notification contains
+	the changed configuration as defined by the language client."""
+	message_direction: str = "clientToServer"
+	registration_options_type = DidChangeConfigurationRegistrationOptions
+	method = "workspace/didChangeConfiguration"
+	params_type = DidChangeConfigurationParams
+
+class ShowMessageNotification:
+	"""The show message notification is sent from a server to a client to ask
+	the client to display a particular message in the user interface."""
+	message_direction: str = "serverToClient"
+	method = "window/showMessage"
+	params_type = ShowMessageParams
+
+class LogMessageNotification:
+	"""The log message notification is sent from the server to the client to ask
+	the client to log a particular message."""
+	message_direction: str = "serverToClient"
+	method = "window/logMessage"
+	params_type = LogMessageParams
+
+class TelemetryEventNotification:
+	"""The telemetry event notification is sent from the server to the client to ask
+	the client to log telemetry data."""
+	message_direction: str = "serverToClient"
+	method = "telemetry/event"
+	params_type = LSPAny
+
+class DidOpenTextDocumentNotification:
+	"""The document open notification is sent from the client to the server to signal
+	newly opened text documents. The document's truth is now managed by the client
+	and the server must not try to read the document's truth using the document's
+	uri. Open in this sense means it is managed by the client. It doesn't necessarily
+	mean that its content is presented in an editor. An open notification must not
+	be sent more than once without a corresponding close notification send before.
+	This means open and close notification must be balanced and the max open count
+	is one."""
+	message_direction: str = "clientToServer"
+	registration_options_type = TextDocumentRegistrationOptions
+	method = "textDocument/didOpen"
+	params_type = DidOpenTextDocumentParams
+
+class DidChangeTextDocumentNotification:
+	"""The document change notification is sent from the client to the server to signal
+	changes to a text document."""
+	message_direction: str = "clientToServer"
+	registration_options_type = TextDocumentChangeRegistrationOptions
+	method = "textDocument/didChange"
+	params_type = DidChangeTextDocumentParams
+
+class DidCloseTextDocumentNotification:
+	"""The document close notification is sent from the client to the server when
+	the document got closed in the client. The document's truth now exists where
+	the document's uri points to (e.g. if the document's uri is a file uri the
+	truth now exists on disk). As with the open notification the close notification
+	is about managing the document's content. Receiving a close notification
+	doesn't mean that the document was open in an editor before. A close
+	notification requires a previous open notification to be sent."""
+	message_direction: str = "clientToServer"
+	registration_options_type = TextDocumentRegistrationOptions
+	method = "textDocument/didClose"
+	params_type = DidCloseTextDocumentParams
+
+class DidSaveTextDocumentNotification:
+	"""The document save notification is sent from the client to the server when
+	the document got saved in the client."""
+	message_direction: str = "clientToServer"
+	registration_options_type = TextDocumentSaveRegistrationOptions
+	method = "textDocument/didSave"
+	params_type = DidSaveTextDocumentParams
+
+class WillSaveTextDocumentNotification:
+	"""A document will save notification is sent from the client to the server before
+	the document is actually saved."""
+	message_direction: str = "clientToServer"
+	registration_options_type = TextDocumentRegistrationOptions
+	method = "textDocument/willSave"
+	params_type = WillSaveTextDocumentParams
+
+class DidChangeWatchedFilesNotification:
+	"""The watched files notification is sent from the client to the server when
+	the client detects changes to file watched by the language client."""
+	message_direction: str = "clientToServer"
+	registration_options_type = DidChangeWatchedFilesRegistrationOptions
+	method = "workspace/didChangeWatchedFiles"
+	params_type = DidChangeWatchedFilesParams
+
+class PublishDiagnosticsNotification:
+	"""Diagnostics notification are sent from the server to the client to signal
+	results of validation runs."""
+	message_direction: str = "serverToClient"
+	method = "textDocument/publishDiagnostics"
+	params_type = PublishDiagnosticsParams
+
+class SetTraceNotification:
+	message_direction: str = "clientToServer"
+	method = "$/setTrace"
+	params_type = SetTraceParams
+
+class LogTraceNotification:
+	message_direction: str = "serverToClient"
+	method = "$/logTrace"
+	params_type = LogTraceParams
+
+class CancelNotification:
+	message_direction: str = "both"
+	method = "$/cancelRequest"
+	params_type = CancelParams
+
+class ProgressNotification:
+	message_direction: str = "both"
+	method = "$/progress"
+	params_type = ProgressParams

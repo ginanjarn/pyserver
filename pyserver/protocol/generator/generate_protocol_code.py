@@ -1,4 +1,5 @@
 import json
+from itertools import chain
 from pathlib import Path
 
 
@@ -7,8 +8,8 @@ try:
         Enumeration,
         Structure,
         TypeAlias,
-        # Request,
-        # Notification,
+        Request,
+        Notification,
     )
     from python_code_generator import Generator
     from dependency_manager import Manager
@@ -17,8 +18,8 @@ except ImportError:
         Enumeration,
         Structure,
         TypeAlias,
-        # Request,
-        # Notification,
+        Request,
+        Notification,
     )
     from .python_code_generator import Generator
     from .dependency_manager import Manager
@@ -37,13 +38,13 @@ def main():
     enumerations = [Enumeration(**e) for e in scheme["enumerations"]]
     structures = [Structure(**s) for s in scheme["structures"]]
     type_aliases = [TypeAlias(**t) for t in scheme["typeAliases"]]
-    # requests = [Request(**r) for r in scheme["requests"]]
-    # notifications = [Notification(**r) for r in scheme["notifications"]]
+    requests = [Request(**r) for r in scheme["requests"]]
+    notifications = [Notification(**r) for r in scheme["notifications"]]
 
-    elements = enumerations + structures + type_aliases
-    dep_manager = Manager(elements)
+    elements = chain(enumerations, structures, type_aliases)
+    dep_manager = Manager(list(elements))
     ordered_elements = dep_manager.get_ordered_elements()
-    gen = Generator(ordered_elements)
+    gen = Generator(list(chain(ordered_elements, requests, notifications)))
     code = gen.generate()
 
     output_path = Path(file_directory.parent, "lsp_protocol.py")

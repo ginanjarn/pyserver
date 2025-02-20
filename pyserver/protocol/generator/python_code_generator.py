@@ -54,12 +54,13 @@ HEADER = """\
 IMPORTS = """\
 from dataclasses import dataclass, field
 from functools import partial
-from typing import List, Tuple, Dict, Union, Literal
+from typing import List, Tuple, Dict, Union, Literal, Any, Optional
 """
 
 SUPPORTS = '''\
 optional_field = partial(field, metadata={"optional": True})
 """optional field"""
+
 uint = int
 """unsigned type compatibility"""
 URI = str
@@ -67,6 +68,41 @@ URI = str
 See https://tools.ietf.org/html/rfc3986"""
 DocumentUri = URI
 """URI with scheme = \'file\'"""
+Session = Any
+"""Session data manager
+TODO: define Session class implementation."""
+
+
+@dataclass
+class Message:
+    jsonrpc: str
+
+
+@dataclass
+class RequestMessage(Message):
+    id: int
+    method: str
+    params: Optional[Any] = optional_field(default=None)
+
+
+@dataclass
+class ResponseError:
+    code: int
+    message: str
+    data: Optional[Any] = optional_field(default=None)
+
+
+@dataclass
+class ResponseMessage(Message):
+    id: int
+    result: Optional[Any] = optional_field(default=None)
+    error: Optional[ResponseError] = optional_field(default=None)
+
+
+@dataclass
+class NotificationMessage(Message):
+    method: str
+    params: Optional[Any] = optional_field(default=None)
 '''
 
 
@@ -192,10 +228,61 @@ class Generator:
         return "\n".join(lines)
 
     def _generate_request(self, element: Request) -> str:
-        return f"{element.typeName}Method = {element.method!r}"
+        lines = [
+            f"@dataclass\nclass {element.typeName}Result(ResponseMessage):",
+            f"\tresult: {self._generate_element_code(element.result)}",
+            "",
+            f"class {element.typeName}:",
+        ]
+        children_lines = []
+
+        if docstring := self._wrap_docstring(element.documentation):
+            children_lines.append(docstring)
+
+        children_lines.append(
+            f'message_direction: str = "{element.messageDirection.value}"'
+        )
+
+        if method := element.registrationMethod:
+            children_lines.append(f'registration_method = "{method}"')
+        if options := element.registrationOptions:
+            children_lines.append(
+                f"registration_options_type = {self._generate_element_code(options)}"
+            )
+        children_lines += [
+            f'method = "{element.method}"',
+            f"params_type = {self._generate_element_code(element.params) or 'None'}",
+            f"result_type = {element.typeName}Result",
+        ]
+
+        lines.append(indent("\n".join(children_lines), prefix="\t"))
+        return "\n".join(lines)
 
     def _generate_notification(self, element: Notification) -> str:
-        return f"{element.typeName}Method = {element.method!r}"
+        lines = [
+            f"class {element.typeName}:",
+        ]
+        children_lines = []
+
+        if docstring := self._wrap_docstring(element.documentation):
+            children_lines.append(docstring)
+
+        children_lines.append(
+            f'message_direction: str = "{element.messageDirection.value}"'
+        )
+
+        if method := element.registrationMethod:
+            children_lines.append(f'registration_method = "{method}"')
+        if options := element.registrationOptions:
+            children_lines.append(
+                f"registration_options_type = {self._generate_element_code(options)}"
+            )
+        children_lines += [
+            f'method = "{element.method}"',
+            f"params_type = {self._generate_element_code(element.params) or 'None'}",
+        ]
+        lines.append(indent("\n".join(children_lines), prefix="\t"))
+        return "\n".join(lines)
 
     def _generate_base(self, element: Base) -> str:
         type_map = defaultdict(
