@@ -10,7 +10,7 @@ import black
 from pyserver.services import diffutils
 from pyserver import errors
 from pyserver.uri import uri_to_path
-from pyserver.workspace import Workspace
+from pyserver.session import Session
 
 
 @dataclass
@@ -43,13 +43,13 @@ class FormattingService:
         return diffutils.get_text_changes(self.params.text, formatted_str)
 
 
-def textdocument_formatting(workspace: Workspace, params: dict) -> None:
+def textdocument_formatting(session: Session, params: dict) -> None:
     try:
         file_path = uri_to_path(params["textDocument"]["uri"])
     except KeyError as err:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
-    document = workspace.get_document(file_path)
+    document = session.get_document(file_path)
     params = FormattingParams(
         document.path,
         document.text,

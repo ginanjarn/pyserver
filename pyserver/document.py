@@ -1,36 +1,23 @@
-"""workspace objects"""
+"""Document object"""
 
-__all__ = ["Document", "Workspace"]
-
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict
+from typing import List
 
 from pyserver import errors
 from pyserver.uri import path_to_uri
 
 
+@dataclass
 class Document:
     """Document object"""
 
-    __slots__ = ["workspace", "path", "language_id", "version", "text", "is_saved"]
-
-    def __init__(
-        self,
-        workspace: "Workspace",
-        path: Path,
-        language_id: str,
-        version: int,
-        text: str,
-    ):
-        self.workspace = workspace
-        self.path = path
-        self.language_id = language_id
-        self.version = version
-        self.text = text
-        self.is_saved = True
-
-    def __repr__(self) -> str:
-        return f"Document({self.path!r})"
+    root_path: Path
+    path: Path
+    language_id: str
+    version: int
+    text: str = ""
+    is_saved: bool = False
 
     @property
     def document_uri(self) -> str:
@@ -76,36 +63,3 @@ class Document:
         if version > self.version:
             self.apply_changes(content_changes)
             self.version = version
-
-
-class Workspace:
-    """workspace handler"""
-
-    __slots__ = ["root_path", "documents"]
-
-    def __init__(self, root_path: Path):
-        self.root_path = root_path
-        self.documents: Dict[str, Document] = {}
-
-        if not self.root_path.is_dir():
-            raise errors.InternalError(f"{root_path!r} is not directory")
-
-    def __repr__(self):
-        return f"Workspace(root_path={self.root_path!r},documents={self.documents!r})"
-
-    def add_document(self, file_path: Path, language_id: str, version: int, text: str):
-        self.documents[file_path] = Document(
-            self, Path(file_path), language_id, version, text
-        )
-
-    def remove_document(self, file_path: Path):
-        try:
-            del self.documents[file_path]
-        except KeyError:
-            pass
-
-    def get_document(self, file_path: Path) -> Document:
-        try:
-            return self.documents[file_path]
-        except KeyError as err:
-            raise errors.InvalidResource(f"{file_path!r} not opened") from err

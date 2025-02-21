@@ -10,7 +10,7 @@ from pyflakes import checker
 
 from pyserver import errors
 from pyserver.uri import uri_to_path, path_to_uri
-from pyserver.workspace import Workspace
+from pyserver.session import Session
 
 
 @dataclass
@@ -157,15 +157,15 @@ class DiagnosticService:
         }
 
 
-def textdocument_publishdiagnostics(workspace: Workspace, params: dict):
+def textdocument_publishdiagnostics(session: Session, params: dict):
     try:
         file_path = uri_to_path(params["textDocument"]["uri"])
     except KeyError as err:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
-    document = workspace.get_document(file_path)
+    document = session.get_document(file_path)
     params = DiagnosticParams(
-        workspace.root_path,
+        document.root_path,
         document.path,
         document.text,
         document.version,

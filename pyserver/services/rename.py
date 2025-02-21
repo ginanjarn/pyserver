@@ -1,6 +1,7 @@
 """rename service"""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Any
 
 from jedi import Script, Project
@@ -9,12 +10,16 @@ from jedi.api.refactoring import Refactoring, RefactoringError
 from pyserver import errors
 from pyserver.uri import uri_to_path, path_to_uri
 from pyserver.services import diffutils
-from pyserver.workspace import Document, Workspace
+from pyserver.document import Document
+from pyserver.session import Session
 
 
 @dataclass
 class RenameParams:
-    document: Document
+    session: Session
+    workspace_path: Path
+    file_path: Path
+    text: str
     line: int
     character: int
     new_name: str
@@ -22,23 +27,14 @@ class RenameParams:
     def jedi_rowcol(self):
         return (self.line + 1, self.character)
 
-    def file_path(self):
-        return self.document.path
-
-    def text(self):
-        return self.document.text
-
-    def workspace(self) -> Workspace:
-        return self.document.workspace
-
 
 class RenameService:
     def __init__(self, params: RenameParams):
         self.params = params
         self.script = Script(
-            self.params.text(),
-            path=self.params.file_path(),
-            project=Project(self.params.workspace().root_path),
+            self.params.text,
+            path=self.params.file_path,
+            project=Project(self.params.workspace_path),
         )
 
     def execute(self) -> Refactoring:
@@ -69,11 +65,11 @@ class RenameService:
             new_text = new_text.replace("\r\n", "\n").replace("\r", "\n")
 
             try:
-                document = self.params.workspace().get_document(file_path)
+                document = self.params.session.get_document(file_path)
             except errors.InvalidResource:
                 temp_text = file_path.read_text()
                 document = Document(
-                    self.params.workspace(), file_path, "", 0, temp_text
+                    self.params.workspace_path, file_path, "", 0, temp_text
                 )
 
             yield {
@@ -89,7 +85,7 @@ class RenameService:
         return {"documentChanges": list(self.build_item(refactored))}
 
 
-def textdocument_rename(workspace: Workspace, params: dict) -> None:
+def textdocument_rename(session: Session, params: dict) -> None:
     try:
         file_path = uri_to_path(params["textDocument"]["uri"])
         line = params["position"]["line"]
@@ -98,7 +94,15 @@ def textdocument_rename(workspace: Workspace, params: dict) -> None:
     except KeyError as err:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
-    document = workspace.get_document(file_path)
-    params = RenameParams(document, line, character, new_name)
+    document = session.get_document(file_path)
+    params = RenameParams(
+        session,
+        document.root_path,
+        document.path,
+        document.text,
+        line,
+        character,
+        new_name,
+    )
     service = RenameService(params)
     return service.get_result()

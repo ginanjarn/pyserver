@@ -11,7 +11,7 @@ from jedi.api.classes import Name
 
 from pyserver import errors
 from pyserver.uri import uri_to_path
-from pyserver.workspace import Workspace
+from pyserver.session import Session
 
 
 @dataclass
@@ -94,7 +94,7 @@ class HoverService:
         return result
 
 
-def textdocument_hover(workspace: Workspace, params: dict) -> None:
+def textdocument_hover(session: Session, params: dict) -> None:
     try:
         file_path = uri_to_path(params["textDocument"]["uri"])
         line = params["position"]["line"]
@@ -102,9 +102,9 @@ def textdocument_hover(workspace: Workspace, params: dict) -> None:
     except KeyError as err:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
-    document = workspace.get_document(file_path)
+    document = session.get_document(file_path)
     params = HoverParams(
-        workspace.root_path,
+        document.root_path,
         document.path,
         document.text,
         line,

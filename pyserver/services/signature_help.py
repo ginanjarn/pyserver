@@ -9,7 +9,7 @@ from jedi.api.classes import Signature
 
 from pyserver import errors
 from pyserver.uri import uri_to_path
-from pyserver.workspace import Workspace
+from pyserver.session import Session
 
 
 @dataclass
@@ -81,7 +81,7 @@ class SignatureHelpService:
         return result
 
 
-def textdocument_signaturehelp(workspace: Workspace, params: dict) -> None:
+def textdocument_signaturehelp(session: Session, params: dict) -> None:
     try:
         file_path = uri_to_path(params["textDocument"]["uri"])
         line = params["position"]["line"]
@@ -89,9 +89,9 @@ def textdocument_signaturehelp(workspace: Workspace, params: dict) -> None:
     except KeyError as err:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
-    document = workspace.get_document(file_path)
+    document = session.get_document(file_path)
     params = SignatureHelpParams(
-        workspace.root_path,
+        document.root_path,
         document.path,
         document.text,
         line,

@@ -8,7 +8,7 @@ from jedi import Script, Project
 
 from pyserver import errors
 from pyserver.uri import uri_to_path
-from pyserver.workspace import Workspace
+from pyserver.session import Session
 
 
 @dataclass
@@ -89,7 +89,7 @@ class PrepareRenameService:
         }
 
 
-def textdocument_preparerename(workspace: Workspace, params: dict) -> None:
+def textdocument_preparerename(session: Session, params: dict) -> None:
     try:
         file_path = uri_to_path(params["textDocument"]["uri"])
         line = params["position"]["line"]
@@ -97,9 +97,9 @@ def textdocument_preparerename(workspace: Workspace, params: dict) -> None:
     except KeyError as err:
         raise errors.InvalidParams(f"invalid params: {err}") from err
 
-    document = workspace.get_document(file_path)
+    document = session.get_document(file_path)
     params = PrepareRenameParams(
-        workspace.root_path,
+        document.root_path,
         document.path,
         document.text,
         line,
