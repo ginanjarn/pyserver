@@ -25,8 +25,9 @@ class Session:
         self.working_documents: Dict[Path, Document] = {}
 
     def add_document(self, file_path: Path, language_id: str, version: int, text: str):
+        workspace_path = self.root_path
         self.working_documents[file_path] = Document(
-            self.root_path, Path(file_path), language_id, version, text
+            workspace_path, file_path, language_id, version, text
         )
 
     def remove_document(self, file_path: Path):

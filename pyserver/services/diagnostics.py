@@ -165,8 +165,8 @@ def textdocument_publishdiagnostics(session: Session, params: dict):
 
     document = session.get_document(file_path)
     params = DiagnosticParams(
-        document.root_path,
-        document.path,
+        document.workspace_path,
+        document.file_path,
         document.text,
         document.version,
     )

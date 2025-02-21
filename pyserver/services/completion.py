@@ -217,8 +217,8 @@ def textdocument_completion(session: Session, params: dict) -> None:
 
     document = session.get_document(file_path)
     params = CompletionParams(
-        document.root_path,
-        document.path,
+        document.workspace_path,
+        document.file_path,
         document.text,
         line,
         character,

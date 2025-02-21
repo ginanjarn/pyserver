@@ -97,8 +97,8 @@ def textdocument_rename(session: Session, params: dict) -> None:
     document = session.get_document(file_path)
     params = RenameParams(
         session,
-        document.root_path,
-        document.path,
+        document.workspace_path,
+        document.file_path,
         document.text,
         line,
         character,

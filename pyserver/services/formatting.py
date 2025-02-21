@@ -51,7 +51,7 @@ def textdocument_formatting(session: Session, params: dict) -> None:
 
     document = session.get_document(file_path)
     params = FormattingParams(
-        document.path,
+        document.file_path,
         document.text,
     )
     service = FormattingService(params)

@@ -12,8 +12,8 @@ from pyserver.uri import path_to_uri
 class Document:
     """Document object"""
 
-    root_path: Path
-    path: Path
+    workspace_path: Path
+    file_path: Path
     language_id: str
     version: int
     text: str = ""
@@ -22,7 +22,7 @@ class Document:
     @property
     def document_uri(self) -> str:
         """document uri"""
-        return path_to_uri(self.path)
+        return path_to_uri(self.file_path)
 
     def save(self):
         self.is_saved = True

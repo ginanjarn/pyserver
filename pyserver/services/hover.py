@@ -104,8 +104,8 @@ def textdocument_hover(session: Session, params: dict) -> None:
 
     document = session.get_document(file_path)
     params = HoverParams(
-        document.root_path,
-        document.path,
+        document.workspace_path,
+        document.file_path,
         document.text,
         line,
         character,
