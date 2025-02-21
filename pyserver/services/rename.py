@@ -75,7 +75,7 @@ class RenameService:
             yield {
                 "textDocument": {
                     "version": document.version,
-                    "uri": document.document_uri,
+                    "uri": path_to_uri(document.file_path),
                 },
                 "edits": diffutils.get_text_changes(document.text, new_text),
             }

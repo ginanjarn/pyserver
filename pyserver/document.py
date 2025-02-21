@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import List
 
 from pyserver import errors
-from pyserver.uri import path_to_uri
 
 
 @dataclass
@@ -18,11 +17,6 @@ class Document:
     version: int
     text: str = ""
     is_saved: bool = False
-
-    @property
-    def document_uri(self) -> str:
-        """document uri"""
-        return path_to_uri(self.file_path)
 
     def save(self):
         self.is_saved = True
