@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Callable, Dict, Any, Optional
 
 from pyserver import errors
+from pyserver.document import apply_document_changes
 from pyserver.uri import uri_to_path
 from pyserver.session import Session, SessionStatus
 
@@ -130,4 +131,8 @@ class LSPHandler(Handler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         document = session.get_document(file_path)
-        document.did_change(version, content_changes)
+        # only update if version incremented
+        if version <= document.version:
+            return
+
+        apply_document_changes(document, content_changes)

@@ -1,5 +1,6 @@
 """Document object"""
 
+from collections import namedtuple
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
@@ -21,39 +22,37 @@ class Document:
     def save(self):
         self.is_saved = True
 
-    def apply_changes(self, content_changes: List[dict]):
-        self.text = self._update_text(self.text, content_changes)
-        self.is_saved = False
 
-    @staticmethod
-    def get_offset(lines: List[str], row: int, column: int) -> int:
-        line_offset = sum([len(l) for l in lines[:row]])
-        return line_offset + column
+LineCharacter = namedtuple("LineCharacter", ["line", "character"])
 
-    @staticmethod
-    def _update_text(text: str, changes: List[dict]) -> str:
-        temp = text
 
-        for change in changes:
-            try:
-                start = change["range"]["start"]
-                end = change["range"]["end"]
-                new_text = change["text"]
+def _get_offset(lines: List[str], row: int, column: int) -> int:
+    line_offset = sum([len(l) for l in lines[:row]])
+    return line_offset + column
 
-                start_line, start_character = start["line"], start["character"]
-                end_line, end_character = end["line"], end["character"]
 
-            except KeyError as err:
-                raise errors.InvalidParams(f"invalid params {err}") from err
+def _update_text(old_text: str, changes: List[dict]) -> str:
+    temp = old_text
 
-            lines = temp.splitlines(keepends=True)
-            start_offset = Document.get_offset(lines, start_line, start_character)
-            end_offset = Document.get_offset(lines, end_line, end_character)
-            temp = f"{temp[:start_offset]}{new_text}{temp[end_offset:]}"
+    for change in changes:
+        try:
+            start = LineCharacter(**change["range"]["start"])
+            end = LineCharacter(**change["range"]["end"])
+            new_text = change["text"]
 
-        return temp
+        except KeyError as err:
+            raise errors.InvalidParams(f"invalid params {err}") from err
 
-    def did_change(self, version: int, content_changes: List[dict], /):
-        if version > self.version:
-            self.apply_changes(content_changes)
-            self.version = version
+        lines = temp.splitlines(keepends=True)
+        start_offset = _get_offset(lines, start.line, start.character)
+        end_offset = _get_offset(lines, end.line, end.character)
+        temp = f"{temp[:start_offset]}{new_text}{temp[end_offset:]}"
+
+    return temp
+
+
+def apply_document_changes(document: Document, content_change: List[dict], /) -> None:
+    """"""
+    new_text = _update_text(document.text, content_change)
+    document.text = new_text
+    document.is_saved = False
