@@ -112,7 +112,7 @@ class LSPHandler(Handler):
             raise errors.InvalidParams(f"invalid params: {err}") from err
 
         if document := session.get_document(file_path):
-            document.save()
+            document.is_saved = True
 
     def textdocument_didclose(self, session: Session, params: dict) -> None:
         try:

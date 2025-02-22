@@ -19,9 +19,6 @@ class Document:
     text: str = ""
     is_saved: bool = False
 
-    def save(self):
-        self.is_saved = True
-
 
 LineCharacter = namedtuple("LineCharacter", ["line", "character"])
 
