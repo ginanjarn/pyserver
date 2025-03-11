@@ -1,10 +1,10 @@
 """completion service"""
 
-import ast
+from ast import parse, AST, NodeVisitor, iter_fields
 from dataclasses import dataclass
 from collections import namedtuple
 from pathlib import Path
-from typing import Dict, Any, Iterator, Iterable
+from typing import Dict, Any, Iterator, Iterable, Optional
 
 from pyflakes import checker
 
@@ -47,7 +47,7 @@ class PyflakesDiagnostic:
 
     def _check(self, filename: str, source: str, /) -> Iterator[Diagnostic]:
         try:
-            tree = ast.parse(source, filename=filename)
+            tree = parse(source, filename=filename)
 
         except SyntaxError as err:
             yield from self._get_error(err, filename)
@@ -77,7 +77,7 @@ class PyflakesDiagnostic:
         text_range = TextRange(start, end)
         yield Diagnostic(KIND_ERROR, filename, text_range, msg, "pyflakes")
 
-    def _get_warnings(self, node: ast.AST, filename: str) -> Iterator[Diagnostic]:
+    def _get_warnings(self, node: AST, filename: str) -> Iterator[Diagnostic]:
 
         w = checker.Checker(node, filename=filename)
         w.messages.sort(key=lambda m: m.lineno)
@@ -89,35 +89,60 @@ class PyflakesDiagnostic:
             offset = message.col
             msg = message.message % message.message_args
 
-            text_range = self._get_leaf_range(node, RowCol(lineno, offset))
+            text_range = get_leaf_range(node, RowCol(lineno, offset))
             yield Diagnostic(KIND_WARNING, filename, text_range, msg, "pyflakes")
 
-    def _get_leaf_range(self, node: ast.AST, location: RowCol) -> TextRange:
-        visitor = FindLeafVisitor(*location)
-        visitor.visit(node)
-        target_node = visitor.target_node
 
-        # python ast use 1-based line index
-        start = RowCol(target_node.lineno - 1, target_node.col_offset)
-        end = RowCol(target_node.end_lineno - 1, target_node.end_col_offset)
-        return TextRange(start, end)
-
-
-class FindLeafVisitor(ast.NodeVisitor):
-    def __init__(self, line: int, col: int, /) -> None:
+class FindLeafVisitor(NodeVisitor):
+    def __init__(self, line: int, column: int, /) -> None:
         self.line = line
-        self.col = col
+        self.column = column
         self.target_node = None
 
-    def visit(self, node: ast.AST) -> Any:
+    def visit(self, node: AST) -> None:
         try:
-            if (node.lineno <= self.line) and (self.line <= node.end_lineno):
-                if (node.col_offset <= self.col) and (self.col <= node.end_col_offset):
-                    self.target_node = node
+            lineno = node.lineno
+            col_offset = node.col_offset
+            end_col_offset = node.end_col_offset
         except AttributeError:
             pass
 
+        else:
+            if self.line == lineno and (col_offset <= self.column <= end_col_offset):
+                self.target_node = node
+
+        # Continue visiting child nodes
         self.generic_visit(node)
+
+    def generic_visit(self, node: AST) -> None:
+        for field, value in iter_fields(node):
+            if (lineno := getattr(field, "lineno", None)) and lineno > self.line:
+                # cancel visit node after search target lineno
+                return
+
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, AST):
+                        self.visit(item)
+            elif isinstance(value, AST):
+                self.visit(value)
+
+
+def get_leaf_at(node: AST, location: RowCol) -> Optional[AST]:
+    """get ast leaf at location"""
+    visitor = FindLeafVisitor(*location)
+    visitor.visit(node)
+    return visitor.target_node
+
+
+def get_leaf_range(node: AST, location: RowCol) -> TextRange:
+    """get ast leaf range at location"""
+    leaf = get_leaf_at(node, location)
+
+    # python ast use 1-based line index
+    start = RowCol(leaf.lineno - 1, leaf.col_offset)
+    end = RowCol(leaf.end_lineno - 1, leaf.end_col_offset)
+    return TextRange(start, end)
 
 
 class DiagnosticService:
