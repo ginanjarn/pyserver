@@ -27,6 +27,13 @@ class CompletionParams:
         return self.line + 1, self.character
 
 
+IDENTIFIER_TYPE = frozenset({"name", "keyword"})
+CALLABLE_TYPE = frozenset({"class", "function"})
+LITERAL_TYPE = frozenset({"string", "fstring_string", "number"})
+ENDMARKER_TYPE = frozenset({"endmarker", "newline"})
+CLOSING_PUNCTUATION = frozenset({":", ")", "]", "}"})
+
+
 class CompletionService:
     def __init__(self, params: CompletionParams):
         self.params = params
@@ -60,17 +67,16 @@ class CompletionService:
 
         leaf_type = leaf.type
 
-        if leaf_type in {"name", "keyword"}:
+        if leaf_type in IDENTIFIER_TYPE:
             return True
 
-        if leaf_type in {"string", "fstring_string", "number"}:
+        if leaf_type in LITERAL_TYPE:
             return False
 
-        closing_operator = {":", ")", "]", "}"}
-        if leaf.value in closing_operator:
+        if leaf.value in CLOSING_PUNCTUATION:
             return False
 
-        if leaf_type in {"endmarker", "newline"}:
+        if leaf_type in ENDMARKER_TYPE:
             prev = leaf.get_previous_leaf()
             if not prev:
                 return False
@@ -80,7 +86,7 @@ class CompletionService:
                 return True
 
             # after closing operator eg: 'def fn()<cursor>'
-            if prev.value in closing_operator:
+            if prev.value in CLOSING_PUNCTUATION:
                 return False
 
             return True
@@ -88,12 +94,12 @@ class CompletionService:
         return True
 
     def _check_is_append_bracket(self, cursor_line: str, leaf: Optional[Leaf]) -> bool:
-        cursor_line = cursor_line.lstrip()
+        line = cursor_line.lstrip()
         if any(
             [
-                cursor_line.startswith("@"),  # decorator
-                cursor_line.startswith("import"),  # import
-                cursor_line.startswith("from"),  # from .. import
+                line[:1] == "@",  # decorator
+                line[:6] == "import",  # import
+                line[:4] == "from",  # from .. import
             ]
         ):
             return False
@@ -104,7 +110,7 @@ class CompletionService:
         if (next_leaf := leaf.get_next_leaf()) and next_leaf.value == "(":
             return False
 
-        if (parent := leaf.parent) and "import" in parent.type:
+        if (parent := leaf.parent) and parent.type[:6] == "import":
             return False
 
         return True
@@ -148,7 +154,7 @@ class CompletionService:
         completion_type = completion.type
 
         # only get signatures for class and function
-        if completion_type in {"class", "function"}:
+        if completion_type in CALLABLE_TYPE:
             signatures = completion.get_signatures()
             visible_signature = None
 
