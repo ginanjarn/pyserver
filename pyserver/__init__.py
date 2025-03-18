@@ -58,7 +58,7 @@ def main():
     setup_logger(log_level)
 
     handler_ = LSPHandler()
-    load_services(handler_)
+    load_features(handler_)
 
     srv = LSPServer(transport_, handler_)
     srv.listen()
@@ -96,40 +96,40 @@ def try_import(mod_name: str, /, attr_name: str = "") -> Optional[Any]:
         return None
 
 
-def load_services(handler: LSPHandler):
-    """load services"""
+def load_features(handler: LSPHandler):
+    """load features"""
 
     service_map = {
         "textDocument/completion": (
-            "pyserver.services.completion",
+            "pyserver.features.completion",
             "textdocument_completion",
         ),
         "textDocument/hover": (
-            "pyserver.services.hover",
+            "pyserver.features.hover",
             "textdocument_hover",
         ),
         "textDocument/definition": (
-            "pyserver.services.definition",
+            "pyserver.features.definition",
             "textdocument_definition",
         ),
         "textDocument/formatting": (
-            "pyserver.services.formatting",
+            "pyserver.features.formatting",
             "textdocument_formatting",
         ),
         "textDocument/publishDiagnostics": (
-            "pyserver.services.diagnostics",
+            "pyserver.features.diagnostics",
             "textdocument_publishdiagnostics",
         ),
         "textDocument/prepareRename": (
-            "pyserver.services.prepare_rename",
+            "pyserver.features.prepare_rename",
             "textdocument_preparerename",
         ),
         "textDocument/rename": (
-            "pyserver.services.rename",
+            "pyserver.features.rename",
             "textdocument_rename",
         ),
         "textDocument/signatureHelp": (
-            "pyserver.services.signature_help",
+            "pyserver.features.signature_help",
             "textdocument_signaturehelp",
         ),
     }

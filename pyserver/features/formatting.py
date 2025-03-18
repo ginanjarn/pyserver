@@ -7,7 +7,7 @@ from typing import Dict, Any, List
 
 import black
 
-from pyserver.services import diffutils
+from pyserver.features import diffutils
 from pyserver import errors
 from pyserver.uri import uri_to_path
 from pyserver.session import Session

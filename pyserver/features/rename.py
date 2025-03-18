@@ -9,7 +9,7 @@ from jedi.api.refactoring import Refactoring, RefactoringError
 
 from pyserver import errors
 from pyserver.uri import uri_to_path, path_to_uri
-from pyserver.services import diffutils
+from pyserver.features import diffutils
 from pyserver.document import Document
 from pyserver.session import Session
 
