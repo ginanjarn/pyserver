@@ -149,36 +149,29 @@ class DiagnosticService:
     def __init__(self, params: DiagnosticParams):
         self.params = params
 
-    def execute(self) -> Diagnostic:
+    def execute(self) -> Iterator[Diagnostic]:
         diagnostic = PyflakesDiagnostic(self.params.file_path, self.params.text)
         return diagnostic.get_diagnostic()
 
-    def build_items(
-        self, diagnostics: Iterable[Diagnostic]
-    ) -> Iterator[Dict[str, Any]]:
+    def build_item(self, item: Diagnostic) -> dict:
+        start, end = item.text_range
 
-        def build_line_item(item: Diagnostic):
-            start, end = item.text_range
-
-            return {
-                "range": {
-                    "start": {"line": start.row, "character": start.column},
-                    "end": {"line": end.row, "character": end.column},
-                },
-                "severity": item.severity,
-                "source": item.source,
-                "message": item.message,
-            }
-
-        for item in diagnostics:
-            yield build_line_item(item)
+        return {
+            "range": {
+                "start": {"line": start.row, "character": start.column},
+                "end": {"line": end.row, "character": end.column},
+            },
+            "severity": item.severity,
+            "source": item.source,
+            "message": item.message,
+        }
 
     def get_result(self) -> Dict[str, Any]:
         diagnostics = self.execute()
         return {
             "uri": path_to_uri(self.params.file_path),
             "version": self.params.version,
-            "diagnostics": list(self.build_items(diagnostics)),
+            "diagnostics": [self.build_item(d) for d in diagnostics],
         }
 
 
