@@ -1,8 +1,9 @@
 """Python language sever implementation"""
 
-import sys
 import argparse
+import json
 import logging
+import sys
 from functools import partial
 from importlib import import_module
 from pathlib import Path
@@ -99,44 +100,15 @@ def try_import(mod_name: str, /, attr_name: str = "") -> Optional[Any]:
 def load_features(handler: LSPHandler):
     """load features"""
 
-    service_map = {
-        "textDocument/completion": (
-            "pyserver.features.completion",
-            "textdocument_completion",
-        ),
-        "textDocument/hover": (
-            "pyserver.features.hover",
-            "textdocument_hover",
-        ),
-        "textDocument/definition": (
-            "pyserver.features.definition",
-            "textdocument_definition",
-        ),
-        "textDocument/formatting": (
-            "pyserver.features.formatting",
-            "textdocument_formatting",
-        ),
-        "textDocument/publishDiagnostics": (
-            "pyserver.features.diagnostics",
-            "textdocument_publishdiagnostics",
-        ),
-        "textDocument/prepareRename": (
-            "pyserver.features.prepare_rename",
-            "textdocument_preparerename",
-        ),
-        "textDocument/rename": (
-            "pyserver.features.rename",
-            "textdocument_rename",
-        ),
-        "textDocument/signatureHelp": (
-            "pyserver.features.signature_help",
-            "textdocument_signaturehelp",
-        ),
-    }
+    file_dir = Path(__file__).parent
+    config_path = Path(file_dir, "config.json")
+    config = json.loads(config_path.read_text())
+    features = config["features"]
 
-    for name, service_func in service_map.items():
-        if func := try_import(*service_func):
+    for name, feature_func in features.items():
+        module, func = feature_func
+        if func := try_import(module, func):
             handler.register_handlers({name: func})
         else:
-            err_message = f"Error load {name!r} service."
+            err_message = f"Error load feature {name!r}."
             printerr(err_message)
