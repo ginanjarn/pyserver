@@ -1,10 +1,10 @@
 """completion service"""
 
-from ast import parse, AST, NodeVisitor, iter_fields
+from ast import parse, AST, walk
 from dataclasses import dataclass
 from collections import namedtuple
 from pathlib import Path
-from typing import Dict, Any, Iterator, Iterable, Optional
+from typing import Dict, Any, Iterator, Optional, List
 
 from pyflakes import checker
 
@@ -82,6 +82,8 @@ class PyflakesDiagnostic:
         w = checker.Checker(node, filename=filename)
         w.messages.sort(key=lambda m: m.lineno)
 
+        leaf_getter = LeafGetter(node)
+
         for message in w.messages:
             # look at the '__str__' of 'pyflakes.Message'
             filename = message.filename
@@ -89,55 +91,78 @@ class PyflakesDiagnostic:
             offset = message.col
             msg = message.message % message.message_args
 
-            text_range = get_leaf_range(node, RowCol(lineno, offset))
+            leaf = leaf_getter.get_leaf_at(RowCol(lineno, offset))
+            text_range = get_leaf_range(leaf)
             yield Diagnostic(KIND_WARNING, filename, text_range, msg, "pyflakes")
 
 
-class FindLeafVisitor(NodeVisitor):
-    def __init__(self, line: int, column: int, /) -> None:
-        self.line = line
-        self.column = column
-        self.target_node = None
+class LeafGetter:
+    """Get leaf from a node without check from beginning"""
 
-    def visit(self, node: AST) -> None:
-        try:
-            lineno = node.lineno
-            col_offset = node.col_offset
-            end_col_offset = node.end_col_offset
-        except AttributeError:
-            pass
+    def __init__(self, node: AST) -> None:
+        filtered = [n for n in walk(node) if hasattr(n, "lineno")]
+        self.nodes = sorted(filtered, key=self.node_sort_key)
 
-        else:
-            if self.line == lineno and (col_offset <= self.column <= end_col_offset):
-                self.target_node = node
+        self._previous_location = RowCol(0, 0)
+        self._iter_index = 0
 
-        # Continue visiting child nodes
-        self.generic_visit(node)
+    def node_sort_key(self, node: AST) -> RowCol:
+        return RowCol(node.lineno, node.col_offset)
 
-    def generic_visit(self, node: AST) -> None:
-        for field, value in iter_fields(node):
-            if (lineno := getattr(field, "lineno", None)) and lineno > self.line:
-                # cancel visit node after search target lineno
-                return
+    def get_leaf_at(self, location: RowCol) -> Optional[AST]:
+        """get leaf at location"""
+        if location < self._previous_location:
+            raise ValueError(f"location must greater than {self._previous_location}")
 
-            if isinstance(value, list):
-                for item in value:
-                    if isinstance(item, AST):
-                        self.visit(item)
-            elif isinstance(value, AST):
-                self.visit(value)
+        self._previous_location = location
+        current_index = self._iter_index
+
+        # get from child
+        if leaf := self._get_leaf(self.nodes[current_index:], location):
+            return leaf
+
+        # reverse the list to find nearest parent from end
+        if leaf := self._get_leaf(reversed(self.nodes[:current_index]), location):
+            self._iter_index = current_index
+            return leaf
+
+        # revert index if not found
+        self._iter_index = current_index
+        return None
+
+    def _get_leaf(self, nodes: List[AST], location: RowCol) -> Optional[AST]:
+        for node in nodes:
+            self._iter_index += 1
+            try:
+                start = (node.lineno, node.col_offset)
+                end = (node.end_lineno, node.end_col_offset)
+            except AttributeError:
+                continue
+
+            if start[0] == location[0] and (start[1] <= location[1] <= end[1]):
+                # find narrower node
+                current_index = self._iter_index
+                if narrower := self._get_leaf(self.nodes[current_index:], location):
+                    return narrower
+
+                # revert index if not found
+                self._iter_index = current_index
+                return node
+
+            if start > location:
+                return None
+
+        return None
 
 
 def get_leaf_at(node: AST, location: RowCol) -> Optional[AST]:
     """get ast leaf at location"""
-    visitor = FindLeafVisitor(*location)
-    visitor.visit(node)
-    return visitor.target_node
+    leaf_getter = LeafGetter(node)
+    return leaf_getter.get_leaf_at(location)
 
 
-def get_leaf_range(node: AST, location: RowCol) -> TextRange:
+def get_leaf_range(leaf: AST) -> TextRange:
     """get ast leaf range at location"""
-    leaf = get_leaf_at(node, location)
 
     # python ast use 1-based line index
     start = RowCol(leaf.lineno - 1, leaf.col_offset)
