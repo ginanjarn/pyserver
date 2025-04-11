@@ -135,17 +135,18 @@ class PythonCodeGenerator:
         parent = "" if not c.parents else "(" + ", ".join(c.parents) + ")"
         code_lines.append(f"@dataclass\nclass {c.name}{parent}:")
 
+        classmember_lines = []
         if doc := c.documentation:
-            code_lines.append(indent_one(to_docstring(doc)))
+            classmember_lines.append(to_docstring(doc))
         if since := c.since:
-            code_lines.append(indent_one(to_comment(f"since {since}")))
-
+            classmember_lines.append(to_comment(f"since {since}"))
         for p in c.properties:
-            code_lines.append(indent_one(self.property_code(p, cls_name=c.name)))
+            classmember_lines.append(self.property_code(p, cls_name=c.name))
 
-        if len(code_lines) == 1:
-            code_lines.append(indent_one('""""""'))
+        if not classmember_lines:
+            classmember_lines.append('""""""')
 
+        code_lines.append(indent_one("\n".join(classmember_lines)))
         return "\n".join(code_lines)
 
     def enum_value_code(self, v: EnumValue) -> str:
