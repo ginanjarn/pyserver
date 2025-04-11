@@ -24,6 +24,13 @@ def to_docstring(text: str) -> str:
     return quoted
 
 
+def to_comment(text: str) -> str:
+    prefix = "# "
+    # Text may has multiple line.
+    # Use indent() to add prefix for each line.
+    return indent(text, prefix=prefix)
+
+
 @dataclass
 class PythonModel:
     """"""
@@ -101,9 +108,6 @@ class PythonCodeGenerator:
             else:
                 raise ValueError(f"unable handle model {type(model)}")
 
-    def as_comment(self, text: str) -> str:
-        return indent(text, prefix="# ")
-
     def property_code(self, p: Property, cls_name: str = "") -> str:
         code_lines = []
         p_type = p.type
@@ -120,7 +124,7 @@ class PythonCodeGenerator:
             code_lines.append(to_docstring(doc))
 
         if since := p.since:
-            code_lines.append(self.as_comment(f"since {since}"))
+            code_lines.append(to_comment(f"since {since}"))
 
         return "\n".join(code_lines)
 
@@ -134,7 +138,7 @@ class PythonCodeGenerator:
         if doc := c.documentation:
             code_lines.append(indent_one(to_docstring(doc)))
         if since := c.since:
-            code_lines.append(indent_one(self.as_comment(f"since {since}")))
+            code_lines.append(indent_one(to_comment(f"since {since}")))
 
         for p in c.properties:
             code_lines.append(indent_one(self.property_code(p, cls_name=c.name)))
@@ -154,7 +158,7 @@ class PythonCodeGenerator:
         if doc := v.documentation:
             code_lines.append(to_docstring(doc))
         if since := v.since:
-            code_lines.append(self.as_comment(f"since {since}"))
+            code_lines.append(to_comment(f"since {since}"))
 
         return "\n".join(code_lines)
 
@@ -168,7 +172,7 @@ class PythonCodeGenerator:
         if doc := c.documentation:
             classmember_lines.append(to_docstring(doc))
         if since := c.since:
-            classmember_lines.append(self.as_comment(f"since {since}"))
+            classmember_lines.append(to_comment(f"since {since}"))
         for v in c.values:
             classmember_lines.append(self.enum_value_code(v))
 
@@ -184,7 +188,7 @@ class PythonCodeGenerator:
         if doc := a.documentation:
             code_lines.append(to_docstring(doc))
         if since := a.since:
-            code_lines.append(self.as_comment(f"since {since}"))
+            code_lines.append(to_comment(f"since {since}"))
 
         return "\n".join(code_lines)
 
