@@ -24,6 +24,13 @@ def to_docstring(text: str) -> str:
     return quoted
 
 
+def to_comment(text: str) -> str:
+    prefix = "# "
+    # Text may has multiple line.
+    # Use indent() to add prefix for each line.
+    return indent(text, prefix=prefix)
+
+
 @dataclass
 class PythonModel:
     """"""
@@ -48,6 +55,23 @@ class Class(PythonModel):
 
 
 @dataclass
+class EnumValue(PythonModel):
+    name: str
+    value: str
+    documentation: str
+    since: str
+
+
+@dataclass
+class EnumClass(PythonModel):
+    name: str
+    type: str
+    documentation: str
+    since: str
+    values: List[EnumValue]
+
+
+@dataclass
 class Assignment(PythonModel):
     name: str
     type: str
@@ -66,6 +90,7 @@ class PythonCodeGenerator:
             '"""LSP Protocol Types"""\n'
             "\n"
             "from dataclasses import dataclass, field\n"
+            "from enum import Enum\n"
             "from typing import TypeAlias, List, Tuple, Dict, Literal, Union, Any\n"
             "\n"
             "URI: TypeAlias = str\n"
@@ -76,13 +101,12 @@ class PythonCodeGenerator:
         for model in self.models:
             if isinstance(model, Class):
                 yield self.class_code(model)
+            elif isinstance(model, EnumClass):
+                yield self.enumclass_code(model)
             elif isinstance(model, Assignment):
                 yield self.assignment_code(model)
             else:
                 raise ValueError(f"unable handle model {type(model)}")
-
-    def as_comment(self, text: str) -> str:
-        return indent(text, prefix="# ")
 
     def property_code(self, p: Property, cls_name: str = "") -> str:
         code_lines = []
@@ -100,7 +124,7 @@ class PythonCodeGenerator:
             code_lines.append(to_docstring(doc))
 
         if since := p.since:
-            code_lines.append(self.as_comment(f"since {since}"))
+            code_lines.append(to_comment(f"since {since}"))
 
         return "\n".join(code_lines)
 
@@ -111,17 +135,52 @@ class PythonCodeGenerator:
         parent = "" if not c.parents else "(" + ", ".join(c.parents) + ")"
         code_lines.append(f"@dataclass\nclass {c.name}{parent}:")
 
+        classmember_lines = []
         if doc := c.documentation:
-            code_lines.append(indent_one(to_docstring(doc)))
+            classmember_lines.append(to_docstring(doc))
         if since := c.since:
-            code_lines.append(indent_one(self.as_comment(f"since {since}")))
-
+            classmember_lines.append(to_comment(f"since {since}"))
         for p in c.properties:
-            code_lines.append(indent_one(self.property_code(p, cls_name=c.name)))
+            classmember_lines.append(self.property_code(p, cls_name=c.name))
 
-        if len(code_lines) == 1:
-            code_lines.append(indent_one('""""""'))
+        if not classmember_lines:
+            classmember_lines.append('""""""')
 
+        code_lines.append(indent_one("\n".join(classmember_lines)))
+        return "\n".join(code_lines)
+
+    def enum_value_code(self, v: EnumValue) -> str:
+        code_lines = []
+        name = v.name
+        if iskeyword(name):
+            name = f"{name}_"
+        code_lines.append(f"{name} = {v.value!r}")
+
+        if doc := v.documentation:
+            code_lines.append(to_docstring(doc))
+        if since := v.since:
+            code_lines.append(to_comment(f"since {since}"))
+
+        return "\n".join(code_lines)
+
+    def enumclass_code(self, c: EnumClass) -> str:
+        indent_one = partial(indent, prefix="    ")
+
+        code_lines = []
+        code_lines.append(f"class {c.name}(Enum):")
+
+        classmember_lines = []
+        if doc := c.documentation:
+            classmember_lines.append(to_docstring(doc))
+        if since := c.since:
+            classmember_lines.append(to_comment(f"since {since}"))
+        for v in c.values:
+            classmember_lines.append(self.enum_value_code(v))
+
+        if not classmember_lines:
+            classmember_lines.append('""""""')
+
+        code_lines.append(indent_one("\n".join(classmember_lines)))
         return "\n".join(code_lines)
 
     def assignment_code(self, a: Assignment) -> str:
@@ -130,7 +189,7 @@ class PythonCodeGenerator:
         if doc := a.documentation:
             code_lines.append(to_docstring(doc))
         if since := a.since:
-            code_lines.append(self.as_comment(f"since {since}"))
+            code_lines.append(to_comment(f"since {since}"))
 
         return "\n".join(code_lines)
 
@@ -150,6 +209,7 @@ class PythonDependencyManager:
             Assignment: self.get_assignment_dependencies,
             Property: self.get_property_dependencies,
             Class: self.get_class_dependencies,
+            EnumClass: self.get_enumclass_dependencies,
         }
 
         yield from func_map[type(model)](model)
@@ -168,6 +228,9 @@ class PythonDependencyManager:
             yield from self.get_property_dependencies(p)
 
     def get_property_dependencies(self, model: Property) -> Iterator[str]:
+        yield from self.get_type(model.type)
+
+    def get_enumclass_dependencies(self, model: EnumClass) -> Iterator[str]:
         yield from self.get_type(model.type)
 
     def get_type(self, type_: str) -> Iterator[str]:
@@ -293,26 +356,18 @@ class PythonModelAdapter:
     def adapt_metadata(self, model: scheme_model.MetaData) -> Iterator[Assignment]:
         yield Assignment("__lsp_version__", "", repr(model.version), "", "")
 
-    def adapt_enumeration(
-        self, model: scheme_model.Enumeration
-    ) -> Iterator[Assignment]:
+    def adapt_enumeration_value(
+        self, model: scheme_model.EnumerationValue
+    ) -> Iterator[EnumClass]:
+        return EnumValue(model.name, model.value, model.documentation, model.since)
+
+    def adapt_enumeration(self, model: scheme_model.Enumeration) -> Iterator[EnumClass]:
         enum_name = model.name
         enum_type = self.get_type_name(model.type)
-        yield Assignment(
-            enum_name,
-            "TypeAlias",
-            enum_type,
-            model.documentation,
-            model.since,
+        enum_values = [self.adapt_enumeration_value(v) for v in model.values]
+        yield EnumClass(
+            enum_name, enum_type, model.documentation, model.since, enum_values
         )
-        for evalue in model.values:
-            yield Assignment(
-                f"{enum_name}{evalue.name}",
-                enum_name,
-                repr(evalue.value),
-                evalue.documentation,
-                evalue.since,
-            )
 
     def get_mixin_properties(self, model: scheme_model.Type) -> List[Property]:
         target_properties = []

@@ -1,6 +1,7 @@
 """LSP Protocol Types"""
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import TypeAlias, List, Tuple, Dict, Literal, Union, Any
 
 URI: TypeAlias = str
@@ -9,920 +10,671 @@ DocumentUri: TypeAlias = str
 
 __lsp_version__= '3.17.0'
 
-SemanticTokenTypes: TypeAlias = str
-"""A set of predefined token types. This set is not fixed
-an clients can specify additional token types via the
-corresponding client capabilities.
-
-@since 3.16.0"""
-# since 3.16.0
-
-SemanticTokenTypesnamespace: SemanticTokenTypes = 'namespace'
-
-SemanticTokenTypestype: SemanticTokenTypes = 'type'
-"""Represents a generic type. Acts as a fallback for types which can't be mapped to
-a specific type like class or enum."""
-
-SemanticTokenTypesclass: SemanticTokenTypes = 'class'
-
-SemanticTokenTypesenum: SemanticTokenTypes = 'enum'
-
-SemanticTokenTypesinterface: SemanticTokenTypes = 'interface'
-
-SemanticTokenTypesstruct: SemanticTokenTypes = 'struct'
-
-SemanticTokenTypestypeParameter: SemanticTokenTypes = 'typeParameter'
-
-SemanticTokenTypesparameter: SemanticTokenTypes = 'parameter'
-
-SemanticTokenTypesvariable: SemanticTokenTypes = 'variable'
-
-SemanticTokenTypesproperty: SemanticTokenTypes = 'property'
-
-SemanticTokenTypesenumMember: SemanticTokenTypes = 'enumMember'
-
-SemanticTokenTypesevent: SemanticTokenTypes = 'event'
-
-SemanticTokenTypesfunction: SemanticTokenTypes = 'function'
-
-SemanticTokenTypesmethod: SemanticTokenTypes = 'method'
-
-SemanticTokenTypesmacro: SemanticTokenTypes = 'macro'
-
-SemanticTokenTypeskeyword: SemanticTokenTypes = 'keyword'
-
-SemanticTokenTypesmodifier: SemanticTokenTypes = 'modifier'
-
-SemanticTokenTypescomment: SemanticTokenTypes = 'comment'
-
-SemanticTokenTypesstring: SemanticTokenTypes = 'string'
-
-SemanticTokenTypesnumber: SemanticTokenTypes = 'number'
-
-SemanticTokenTypesregexp: SemanticTokenTypes = 'regexp'
-
-SemanticTokenTypesoperator: SemanticTokenTypes = 'operator'
-
-SemanticTokenTypesdecorator: SemanticTokenTypes = 'decorator'
-"""@since 3.17.0"""
-# since 3.17.0
-
-SemanticTokenTypeslabel: SemanticTokenTypes = 'label'
-"""@since 3.18.0"""
-# since 3.18.0
-
-SemanticTokenModifiers: TypeAlias = str
-"""A set of predefined token modifiers. This set is not fixed
-an clients can specify additional token types via the
-corresponding client capabilities.
-
-@since 3.16.0"""
-# since 3.16.0
-
-SemanticTokenModifiersdeclaration: SemanticTokenModifiers = 'declaration'
-
-SemanticTokenModifiersdefinition: SemanticTokenModifiers = 'definition'
-
-SemanticTokenModifiersreadonly: SemanticTokenModifiers = 'readonly'
-
-SemanticTokenModifiersstatic: SemanticTokenModifiers = 'static'
-
-SemanticTokenModifiersdeprecated: SemanticTokenModifiers = 'deprecated'
-
-SemanticTokenModifiersabstract: SemanticTokenModifiers = 'abstract'
-
-SemanticTokenModifiersasync: SemanticTokenModifiers = 'async'
-
-SemanticTokenModifiersmodification: SemanticTokenModifiers = 'modification'
-
-SemanticTokenModifiersdocumentation: SemanticTokenModifiers = 'documentation'
-
-SemanticTokenModifiersdefaultLibrary: SemanticTokenModifiers = 'defaultLibrary'
-
-DocumentDiagnosticReportKind: TypeAlias = str
-"""The document diagnostic report kinds.
-
-@since 3.17.0"""
-# since 3.17.0
-
-DocumentDiagnosticReportKindFull: DocumentDiagnosticReportKind = 'full'
-"""A diagnostic report with a full
-set of problems."""
-
-DocumentDiagnosticReportKindUnchanged: DocumentDiagnosticReportKind = 'unchanged'
-"""A report indicating that the last
-returned report is still accurate."""
-
-ErrorCodes: TypeAlias = int
-"""Predefined error codes."""
-
-ErrorCodesParseError: ErrorCodes = -32700
-
-ErrorCodesInvalidRequest: ErrorCodes = -32600
-
-ErrorCodesMethodNotFound: ErrorCodes = -32601
-
-ErrorCodesInvalidParams: ErrorCodes = -32602
-
-ErrorCodesInternalError: ErrorCodes = -32603
-
-ErrorCodesServerNotInitialized: ErrorCodes = -32002
-"""Error code indicating that a server received a notification or
-request before the server has received the `initialize` request."""
-
-ErrorCodesUnknownErrorCode: ErrorCodes = -32001
-
-LSPErrorCodes: TypeAlias = int
-
-LSPErrorCodesRequestFailed: LSPErrorCodes = -32803
-"""A request failed but it was syntactically correct, e.g the
-method name was known and the parameters were valid. The error
-message should contain human readable information about why
-the request failed.
-
-@since 3.17.0"""
-# since 3.17.0
-
-LSPErrorCodesServerCancelled: LSPErrorCodes = -32802
-"""The server cancelled the request. This error code should
-only be used for requests that explicitly support being
-server cancellable.
-
-@since 3.17.0"""
-# since 3.17.0
-
-LSPErrorCodesContentModified: LSPErrorCodes = -32801
-"""The server detected that the content of a document got
-modified outside normal conditions. A server should
-NOT send this error code if it detects a content change
-in it unprocessed messages. The result even computed
-on an older state might still be useful for the client.
-
-If a client decides that a result is not of any use anymore
-the client should cancel the request."""
-
-LSPErrorCodesRequestCancelled: LSPErrorCodes = -32800
-"""The client has canceled a request and a server has detected
-the cancel."""
-
-FoldingRangeKind: TypeAlias = str
-"""A set of predefined range kinds."""
-
-FoldingRangeKindComment: FoldingRangeKind = 'comment'
-"""Folding range for a comment"""
-
-FoldingRangeKindImports: FoldingRangeKind = 'imports'
-"""Folding range for an import or include"""
-
-FoldingRangeKindRegion: FoldingRangeKind = 'region'
-"""Folding range for a region (e.g. `#region`)"""
-
-SymbolKind: TypeAlias = int
-"""A symbol kind."""
-
-SymbolKindFile: SymbolKind = 1
-
-SymbolKindModule: SymbolKind = 2
-
-SymbolKindNamespace: SymbolKind = 3
-
-SymbolKindPackage: SymbolKind = 4
-
-SymbolKindClass: SymbolKind = 5
-
-SymbolKindMethod: SymbolKind = 6
-
-SymbolKindProperty: SymbolKind = 7
-
-SymbolKindField: SymbolKind = 8
-
-SymbolKindConstructor: SymbolKind = 9
-
-SymbolKindEnum: SymbolKind = 10
-
-SymbolKindInterface: SymbolKind = 11
-
-SymbolKindFunction: SymbolKind = 12
-
-SymbolKindVariable: SymbolKind = 13
-
-SymbolKindConstant: SymbolKind = 14
-
-SymbolKindString: SymbolKind = 15
-
-SymbolKindNumber: SymbolKind = 16
-
-SymbolKindBoolean: SymbolKind = 17
-
-SymbolKindArray: SymbolKind = 18
-
-SymbolKindObject: SymbolKind = 19
-
-SymbolKindKey: SymbolKind = 20
-
-SymbolKindNull: SymbolKind = 21
-
-SymbolKindEnumMember: SymbolKind = 22
-
-SymbolKindStruct: SymbolKind = 23
-
-SymbolKindEvent: SymbolKind = 24
-
-SymbolKindOperator: SymbolKind = 25
-
-SymbolKindTypeParameter: SymbolKind = 26
-
-SymbolTag: TypeAlias = int
-"""Symbol tags are extra annotations that tweak the rendering of a symbol.
-
-@since 3.16"""
-# since 3.16
-
-SymbolTagDeprecated: SymbolTag = 1
-"""Render a symbol as obsolete, usually using a strike-out."""
-
-UniquenessLevel: TypeAlias = str
-"""Moniker uniqueness level to define scope of the moniker.
-
-@since 3.16.0"""
-# since 3.16.0
-
-UniquenessLeveldocument: UniquenessLevel = 'document'
-"""The moniker is only unique inside a document"""
-
-UniquenessLevelproject: UniquenessLevel = 'project'
-"""The moniker is unique inside a project for which a dump got created"""
-
-UniquenessLevelgroup: UniquenessLevel = 'group'
-"""The moniker is unique inside the group to which a project belongs"""
-
-UniquenessLevelscheme: UniquenessLevel = 'scheme'
-"""The moniker is unique inside the moniker scheme."""
-
-UniquenessLevelglobal: UniquenessLevel = 'global'
-"""The moniker is globally unique"""
-
-MonikerKind: TypeAlias = str
-"""The moniker kind.
-
-@since 3.16.0"""
-# since 3.16.0
-
-MonikerKindimport: MonikerKind = 'import'
-"""The moniker represent a symbol that is imported into a project"""
-
-MonikerKindexport: MonikerKind = 'export'
-"""The moniker represents a symbol that is exported from a project"""
-
-MonikerKindlocal: MonikerKind = 'local'
-"""The moniker represents a symbol that is local to a project (e.g. a local
-variable of a function, a class not visible outside the project, ...)"""
-
-InlayHintKind: TypeAlias = int
-"""Inlay hint kinds.
-
-@since 3.17.0"""
-# since 3.17.0
-
-InlayHintKindType: InlayHintKind = 1
-"""An inlay hint that for a type annotation."""
-
-InlayHintKindParameter: InlayHintKind = 2
-"""An inlay hint that is for a parameter."""
-
-MessageType: TypeAlias = int
-"""The message type"""
-
-MessageTypeError: MessageType = 1
-"""An error message."""
-
-MessageTypeWarning: MessageType = 2
-"""A warning message."""
-
-MessageTypeInfo: MessageType = 3
-"""An information message."""
-
-MessageTypeLog: MessageType = 4
-"""A log message."""
-
-MessageTypeDebug: MessageType = 5
-"""A debug message.
-
-@since 3.18.0
-@proposed"""
-# since 3.18.0
-
-TextDocumentSyncKind: TypeAlias = int
-"""Defines how the host (editor) should sync
-document changes to the language server."""
-
-TextDocumentSyncKindNone: TextDocumentSyncKind = 0
-"""Documents should not be synced at all."""
-
-TextDocumentSyncKindFull: TextDocumentSyncKind = 1
-"""Documents are synced by always sending the full content
-of the document."""
-
-TextDocumentSyncKindIncremental: TextDocumentSyncKind = 2
-"""Documents are synced by sending the full content on open.
-After that only incremental updates to the document are
-send."""
-
-TextDocumentSaveReason: TypeAlias = int
-"""Represents reasons why a text document is saved."""
-
-TextDocumentSaveReasonManual: TextDocumentSaveReason = 1
-"""Manually triggered, e.g. by the user pressing save, by starting debugging,
-or by an API call."""
-
-TextDocumentSaveReasonAfterDelay: TextDocumentSaveReason = 2
-"""Automatic after a delay."""
-
-TextDocumentSaveReasonFocusOut: TextDocumentSaveReason = 3
-"""When the editor lost focus."""
-
-CompletionItemKind: TypeAlias = int
-"""The kind of a completion entry."""
-
-CompletionItemKindText: CompletionItemKind = 1
-
-CompletionItemKindMethod: CompletionItemKind = 2
-
-CompletionItemKindFunction: CompletionItemKind = 3
-
-CompletionItemKindConstructor: CompletionItemKind = 4
-
-CompletionItemKindField: CompletionItemKind = 5
-
-CompletionItemKindVariable: CompletionItemKind = 6
-
-CompletionItemKindClass: CompletionItemKind = 7
-
-CompletionItemKindInterface: CompletionItemKind = 8
-
-CompletionItemKindModule: CompletionItemKind = 9
-
-CompletionItemKindProperty: CompletionItemKind = 10
-
-CompletionItemKindUnit: CompletionItemKind = 11
-
-CompletionItemKindValue: CompletionItemKind = 12
-
-CompletionItemKindEnum: CompletionItemKind = 13
-
-CompletionItemKindKeyword: CompletionItemKind = 14
-
-CompletionItemKindSnippet: CompletionItemKind = 15
-
-CompletionItemKindColor: CompletionItemKind = 16
-
-CompletionItemKindFile: CompletionItemKind = 17
-
-CompletionItemKindReference: CompletionItemKind = 18
-
-CompletionItemKindFolder: CompletionItemKind = 19
-
-CompletionItemKindEnumMember: CompletionItemKind = 20
-
-CompletionItemKindConstant: CompletionItemKind = 21
-
-CompletionItemKindStruct: CompletionItemKind = 22
-
-CompletionItemKindEvent: CompletionItemKind = 23
-
-CompletionItemKindOperator: CompletionItemKind = 24
-
-CompletionItemKindTypeParameter: CompletionItemKind = 25
-
-CompletionItemTag: TypeAlias = int
-"""Completion item tags are extra annotations that tweak the rendering of a completion
-item.
-
-@since 3.15.0"""
-# since 3.15.0
-
-CompletionItemTagDeprecated: CompletionItemTag = 1
-"""Render a completion as obsolete, usually using a strike-out."""
-
-InsertTextFormat: TypeAlias = int
-"""Defines whether the insert text in a completion item should be interpreted as
-plain text or a snippet."""
-
-InsertTextFormatPlainText: InsertTextFormat = 1
-"""The primary text to be inserted is treated as a plain string."""
-
-InsertTextFormatSnippet: InsertTextFormat = 2
-"""The primary text to be inserted is treated as a snippet.
-
-A snippet can define tab stops and placeholders with `$1`, `$2`
-and `${3:foo}`. `$0` defines the final tab stop, it defaults to
-the end of the snippet. Placeholders with equal identifiers are linked,
-that is typing in one will update others too.
-
-See also: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#snippet_syntax"""
-
-InsertTextMode: TypeAlias = int
-"""How whitespace and indentation is handled during completion
-item insertion.
-
-@since 3.16.0"""
-# since 3.16.0
-
-InsertTextModeasIs: InsertTextMode = 1
-"""The insertion or replace strings is taken as it is. If the
-value is multi line the lines below the cursor will be
-inserted using the indentation defined in the string value.
-The client will not apply any kind of adjustments to the
-string."""
-
-InsertTextModeadjustIndentation: InsertTextMode = 2
-"""The editor adjusts leading whitespace of new lines so that
-they match the indentation up to the cursor of the line for
-which the item is accepted.
-
-Consider a line like this: <2tabs><cursor><3tabs>foo. Accepting a
-multi line completion item is indented using 2 tabs and all
-following lines inserted will be indented using 2 tabs as well."""
-
-DocumentHighlightKind: TypeAlias = int
-"""A document highlight kind."""
-
-DocumentHighlightKindText: DocumentHighlightKind = 1
-"""A textual occurrence."""
-
-DocumentHighlightKindRead: DocumentHighlightKind = 2
-"""Read-access of a symbol, like reading a variable."""
-
-DocumentHighlightKindWrite: DocumentHighlightKind = 3
-"""Write-access of a symbol, like writing to a variable."""
-
-CodeActionKind: TypeAlias = str
-"""A set of predefined code action kinds"""
-
-CodeActionKindEmpty: CodeActionKind = ''
-"""Empty kind."""
-
-CodeActionKindQuickFix: CodeActionKind = 'quickfix'
-"""Base kind for quickfix actions: 'quickfix'"""
-
-CodeActionKindRefactor: CodeActionKind = 'refactor'
-"""Base kind for refactoring actions: 'refactor'"""
-
-CodeActionKindRefactorExtract: CodeActionKind = 'refactor.extract'
-"""Base kind for refactoring extraction actions: 'refactor.extract'
-
-Example extract actions:
-
-- Extract method
-- Extract function
-- Extract variable
-- Extract interface from class
-- ..."""
-
-CodeActionKindRefactorInline: CodeActionKind = 'refactor.inline'
-"""Base kind for refactoring inline actions: 'refactor.inline'
-
-Example inline actions:
-
-- Inline function
-- Inline variable
-- Inline constant
-- ..."""
-
-CodeActionKindRefactorMove: CodeActionKind = 'refactor.move'
-"""Base kind for refactoring move actions: `refactor.move`
-
-Example move actions:
-
-- Move a function to a new file
-- Move a property between classes
-- Move method to base class
-- ...
-
-@since 3.18.0
-@proposed"""
-# since 3.18.0
-
-CodeActionKindRefactorRewrite: CodeActionKind = 'refactor.rewrite'
-"""Base kind for refactoring rewrite actions: 'refactor.rewrite'
-
-Example rewrite actions:
-
-- Convert JavaScript function to class
-- Add or remove parameter
-- Encapsulate field
-- Make method static
-- Move method to base class
-- ..."""
-
-CodeActionKindSource: CodeActionKind = 'source'
-"""Base kind for source actions: `source`
-
-Source code actions apply to the entire file."""
-
-CodeActionKindSourceOrganizeImports: CodeActionKind = 'source.organizeImports'
-"""Base kind for an organize imports source action: `source.organizeImports`"""
-
-CodeActionKindSourceFixAll: CodeActionKind = 'source.fixAll'
-"""Base kind for auto-fix source actions: `source.fixAll`.
-
-Fix all actions automatically fix errors that have a clear fix that do not require user input.
-They should not suppress errors or perform unsafe fixes such as generating new types or classes.
-
-@since 3.15.0"""
-# since 3.15.0
-
-CodeActionKindNotebook: CodeActionKind = 'notebook'
-"""Base kind for all code actions applying to the entire notebook's scope. CodeActionKinds using
-this should always begin with `notebook.`
-
-@since 3.18.0"""
-# since 3.18.0
-
-CodeActionTag: TypeAlias = int
-"""Code action tags are extra annotations that tweak the behavior of a code action.
-
-@since 3.18.0 - proposed"""
-# since 3.18.0 - proposed
-
-CodeActionTagLLMGenerated: CodeActionTag = 1
-"""Marks the code action as LLM-generated."""
-
-TraceValue: TypeAlias = str
-
-TraceValueOff: TraceValue = 'off'
-"""Turn tracing off."""
-
-TraceValueMessages: TraceValue = 'messages'
-"""Trace messages only."""
-
-TraceValueVerbose: TraceValue = 'verbose'
-"""Verbose message tracing."""
-
-MarkupKind: TypeAlias = str
-"""Describes the content type that a client supports in various
-result literals like `Hover`, `ParameterInfo` or `CompletionItem`.
-
-Please note that `MarkupKinds` must not start with a `$`. This kinds
-are reserved for internal usage."""
-
-MarkupKindPlainText: MarkupKind = 'plaintext'
-"""Plain text is supported as a content format"""
-
-MarkupKindMarkdown: MarkupKind = 'markdown'
-"""Markdown is supported as a content format"""
-
-LanguageKind: TypeAlias = str
-"""Predefined Language kinds
-@since 3.18.0"""
-# since 3.18.0
-
-LanguageKindABAP: LanguageKind = 'abap'
-
-LanguageKindWindowsBat: LanguageKind = 'bat'
-
-LanguageKindBibTeX: LanguageKind = 'bibtex'
-
-LanguageKindClojure: LanguageKind = 'clojure'
-
-LanguageKindCoffeescript: LanguageKind = 'coffeescript'
-
-LanguageKindC: LanguageKind = 'c'
-
-LanguageKindCPP: LanguageKind = 'cpp'
-
-LanguageKindCSharp: LanguageKind = 'csharp'
-
-LanguageKindCSS: LanguageKind = 'css'
-
-LanguageKindD: LanguageKind = 'd'
-"""@since 3.18.0
-@proposed"""
-# since 3.18.0
-
-LanguageKindDelphi: LanguageKind = 'pascal'
-"""@since 3.18.0
-@proposed"""
-# since 3.18.0
-
-LanguageKindDiff: LanguageKind = 'diff'
-
-LanguageKindDart: LanguageKind = 'dart'
-
-LanguageKindDockerfile: LanguageKind = 'dockerfile'
-
-LanguageKindElixir: LanguageKind = 'elixir'
-
-LanguageKindErlang: LanguageKind = 'erlang'
-
-LanguageKindFSharp: LanguageKind = 'fsharp'
-
-LanguageKindGitCommit: LanguageKind = 'git-commit'
-
-LanguageKindGitRebase: LanguageKind = 'rebase'
-
-LanguageKindGo: LanguageKind = 'go'
-
-LanguageKindGroovy: LanguageKind = 'groovy'
-
-LanguageKindHandlebars: LanguageKind = 'handlebars'
-
-LanguageKindHaskell: LanguageKind = 'haskell'
-
-LanguageKindHTML: LanguageKind = 'html'
-
-LanguageKindIni: LanguageKind = 'ini'
-
-LanguageKindJava: LanguageKind = 'java'
-
-LanguageKindJavaScript: LanguageKind = 'javascript'
-
-LanguageKindJavaScriptReact: LanguageKind = 'javascriptreact'
-
-LanguageKindJSON: LanguageKind = 'json'
-
-LanguageKindLaTeX: LanguageKind = 'latex'
-
-LanguageKindLess: LanguageKind = 'less'
-
-LanguageKindLua: LanguageKind = 'lua'
-
-LanguageKindMakefile: LanguageKind = 'makefile'
-
-LanguageKindMarkdown: LanguageKind = 'markdown'
-
-LanguageKindObjectiveC: LanguageKind = 'objective-c'
-
-LanguageKindObjectiveCPP: LanguageKind = 'objective-cpp'
-
-LanguageKindPascal: LanguageKind = 'pascal'
-"""@since 3.18.0
-@proposed"""
-# since 3.18.0
-
-LanguageKindPerl: LanguageKind = 'perl'
-
-LanguageKindPerl6: LanguageKind = 'perl6'
-
-LanguageKindPHP: LanguageKind = 'php'
-
-LanguageKindPowershell: LanguageKind = 'powershell'
-
-LanguageKindPug: LanguageKind = 'jade'
-
-LanguageKindPython: LanguageKind = 'python'
-
-LanguageKindR: LanguageKind = 'r'
-
-LanguageKindRazor: LanguageKind = 'razor'
-
-LanguageKindRuby: LanguageKind = 'ruby'
-
-LanguageKindRust: LanguageKind = 'rust'
-
-LanguageKindSCSS: LanguageKind = 'scss'
-
-LanguageKindSASS: LanguageKind = 'sass'
-
-LanguageKindScala: LanguageKind = 'scala'
-
-LanguageKindShaderLab: LanguageKind = 'shaderlab'
-
-LanguageKindShellScript: LanguageKind = 'shellscript'
-
-LanguageKindSQL: LanguageKind = 'sql'
-
-LanguageKindSwift: LanguageKind = 'swift'
-
-LanguageKindTypeScript: LanguageKind = 'typescript'
-
-LanguageKindTypeScriptReact: LanguageKind = 'typescriptreact'
-
-LanguageKindTeX: LanguageKind = 'tex'
-
-LanguageKindVisualBasic: LanguageKind = 'vb'
-
-LanguageKindXML: LanguageKind = 'xml'
-
-LanguageKindXSL: LanguageKind = 'xsl'
-
-LanguageKindYAML: LanguageKind = 'yaml'
-
-InlineCompletionTriggerKind: TypeAlias = int
-"""Describes how an {@link InlineCompletionItemProvider inline completion provider} was triggered.
-
-@since 3.18.0
-@proposed"""
-# since 3.18.0
-
-InlineCompletionTriggerKindInvoked: InlineCompletionTriggerKind = 1
-"""Completion was triggered explicitly by a user gesture."""
-
-InlineCompletionTriggerKindAutomatic: InlineCompletionTriggerKind = 2
-"""Completion was triggered automatically while editing."""
-
-PositionEncodingKind: TypeAlias = str
-"""A set of predefined position encoding kinds.
-
-@since 3.17.0"""
-# since 3.17.0
-
-PositionEncodingKindUTF8: PositionEncodingKind = 'utf-8'
-"""Character offsets count UTF-8 code units (e.g. bytes)."""
-
-PositionEncodingKindUTF16: PositionEncodingKind = 'utf-16'
-"""Character offsets count UTF-16 code units.
-
-This is the default and must always be supported
-by servers"""
-
-PositionEncodingKindUTF32: PositionEncodingKind = 'utf-32'
-"""Character offsets count UTF-32 code units.
-
-Implementation note: these are the same as Unicode codepoints,
-so this `PositionEncodingKind` may also be used for an
-encoding-agnostic representation of character offsets."""
-
-FileChangeType: TypeAlias = int
-"""The file event type"""
-
-FileChangeTypeCreated: FileChangeType = 1
-"""The file got created."""
-
-FileChangeTypeChanged: FileChangeType = 2
-"""The file got changed."""
-
-FileChangeTypeDeleted: FileChangeType = 3
-"""The file got deleted."""
-
-WatchKind: TypeAlias = int
-
-WatchKindCreate: WatchKind = 1
-"""Interested in create events."""
-
-WatchKindChange: WatchKind = 2
-"""Interested in change events"""
-
-WatchKindDelete: WatchKind = 4
-"""Interested in delete events"""
-
-DiagnosticSeverity: TypeAlias = int
-"""The diagnostic's severity."""
-
-DiagnosticSeverityError: DiagnosticSeverity = 1
-"""Reports an error."""
-
-DiagnosticSeverityWarning: DiagnosticSeverity = 2
-"""Reports a warning."""
-
-DiagnosticSeverityInformation: DiagnosticSeverity = 3
-"""Reports an information."""
-
-DiagnosticSeverityHint: DiagnosticSeverity = 4
-"""Reports a hint."""
-
-DiagnosticTag: TypeAlias = int
-"""The diagnostic tags.
-
-@since 3.15.0"""
-# since 3.15.0
-
-DiagnosticTagUnnecessary: DiagnosticTag = 1
-"""Unused or unnecessary code.
-
-Clients are allowed to render diagnostics with this tag faded out instead of having
-an error squiggle."""
-
-DiagnosticTagDeprecated: DiagnosticTag = 2
-"""Deprecated or obsolete code.
-
-Clients are allowed to rendered diagnostics with this tag strike through."""
-
-CompletionTriggerKind: TypeAlias = int
-"""How a completion was triggered"""
-
-CompletionTriggerKindInvoked: CompletionTriggerKind = 1
-"""Completion was triggered by typing an identifier (24x7 code
-complete), manual invocation (e.g Ctrl+Space) or via API."""
-
-CompletionTriggerKindTriggerCharacter: CompletionTriggerKind = 2
-"""Completion was triggered by a trigger character specified by
-the `triggerCharacters` properties of the `CompletionRegistrationOptions`."""
-
-CompletionTriggerKindTriggerForIncompleteCompletions: CompletionTriggerKind = 3
-"""Completion was re-triggered as current completion list is incomplete"""
-
-ApplyKind: TypeAlias = int
-"""Defines how values from a set of defaults and an individual item will be
-merged.
-
-@since 3.18.0"""
-# since 3.18.0
-
-ApplyKindReplace: ApplyKind = 1
-"""The value from the individual item (if provided and not `null`) will be
-used instead of the default."""
-
-ApplyKindMerge: ApplyKind = 2
-"""The value from the item will be merged with the default.
-
-The specific rules for mergeing values are defined against each field
-that supports merging."""
-
-SignatureHelpTriggerKind: TypeAlias = int
-"""How a signature help was triggered.
-
-@since 3.15.0"""
-# since 3.15.0
-
-SignatureHelpTriggerKindInvoked: SignatureHelpTriggerKind = 1
-"""Signature help was invoked manually by the user or by a command."""
-
-SignatureHelpTriggerKindTriggerCharacter: SignatureHelpTriggerKind = 2
-"""Signature help was triggered by a trigger character."""
-
-SignatureHelpTriggerKindContentChange: SignatureHelpTriggerKind = 3
-"""Signature help was triggered by the cursor moving or by the document content changing."""
-
-CodeActionTriggerKind: TypeAlias = int
-"""The reason why code actions were requested.
-
-@since 3.17.0"""
-# since 3.17.0
-
-CodeActionTriggerKindInvoked: CodeActionTriggerKind = 1
-"""Code actions were explicitly requested by the user or by an extension."""
-
-CodeActionTriggerKindAutomatic: CodeActionTriggerKind = 2
-"""Code actions were requested automatically.
-
-This typically happens when current selection in a file changes, but can
-also be triggered when file content changes."""
-
-FileOperationPatternKind: TypeAlias = str
-"""A pattern kind describing if a glob pattern matches a file a folder or
-both.
-
-@since 3.16.0"""
-# since 3.16.0
-
-FileOperationPatternKindfile: FileOperationPatternKind = 'file'
-"""The pattern matches a file only."""
-
-FileOperationPatternKindfolder: FileOperationPatternKind = 'folder'
-"""The pattern matches a folder only."""
-
-NotebookCellKind: TypeAlias = int
-"""A notebook cell kind.
-
-@since 3.17.0"""
-# since 3.17.0
-
-NotebookCellKindMarkup: NotebookCellKind = 1
-"""A markup-cell is formatted source that is used for display."""
-
-NotebookCellKindCode: NotebookCellKind = 2
-"""A code-cell is source code."""
-
-ResourceOperationKind: TypeAlias = str
-
-ResourceOperationKindCreate: ResourceOperationKind = 'create'
-"""Supports creating new files and folders."""
-
-ResourceOperationKindRename: ResourceOperationKind = 'rename'
-"""Supports renaming existing files and folders."""
-
-ResourceOperationKindDelete: ResourceOperationKind = 'delete'
-"""Supports deleting existing files and folders."""
-
-FailureHandlingKind: TypeAlias = str
-
-FailureHandlingKindAbort: FailureHandlingKind = 'abort'
-"""Applying the workspace change is simply aborted if one of the changes provided
-fails. All operations executed before the failing operation stay executed."""
-
-FailureHandlingKindTransactional: FailureHandlingKind = 'transactional'
-"""All operations are executed transactional. That means they either all
-succeed or no changes at all are applied to the workspace."""
-
-FailureHandlingKindTextOnlyTransactional: FailureHandlingKind = 'textOnlyTransactional'
-"""If the workspace edit contains only textual file changes they are executed transactional.
-If resource changes (create, rename or delete file) are part of the change the failure
-handling strategy is abort."""
-
-FailureHandlingKindUndo: FailureHandlingKind = 'undo'
-"""The client tries to undo the operations already executed. But there is no
-guarantee that this is succeeding."""
-
-PrepareSupportDefaultBehavior: TypeAlias = int
-
-PrepareSupportDefaultBehaviorIdentifier: PrepareSupportDefaultBehavior = 1
-"""The client's default behavior is to select the identifier
-according the to language's syntax rule."""
-
-TokenFormat: TypeAlias = str
-
-TokenFormatRelative: TokenFormat = 'relative'
+class SemanticTokenTypes(Enum):
+    """A set of predefined token types. This set is not fixed
+    an clients can specify additional token types via the
+    corresponding client capabilities.
+
+    @since 3.16.0"""
+    # since 3.16.0
+    namespace = 'namespace'
+    type = 'type'
+    """Represents a generic type. Acts as a fallback for types which can't be mapped to
+    a specific type like class or enum."""
+    class_ = 'class'
+    enum = 'enum'
+    interface = 'interface'
+    struct = 'struct'
+    typeParameter = 'typeParameter'
+    parameter = 'parameter'
+    variable = 'variable'
+    property = 'property'
+    enumMember = 'enumMember'
+    event = 'event'
+    function = 'function'
+    method = 'method'
+    macro = 'macro'
+    keyword = 'keyword'
+    modifier = 'modifier'
+    comment = 'comment'
+    string = 'string'
+    number = 'number'
+    regexp = 'regexp'
+    operator = 'operator'
+    decorator = 'decorator'
+    """@since 3.17.0"""
+    # since 3.17.0
+    label = 'label'
+    """@since 3.18.0"""
+    # since 3.18.0
+
+class SemanticTokenModifiers(Enum):
+    """A set of predefined token modifiers. This set is not fixed
+    an clients can specify additional token types via the
+    corresponding client capabilities.
+
+    @since 3.16.0"""
+    # since 3.16.0
+    declaration = 'declaration'
+    definition = 'definition'
+    readonly = 'readonly'
+    static = 'static'
+    deprecated = 'deprecated'
+    abstract = 'abstract'
+    async_ = 'async'
+    modification = 'modification'
+    documentation = 'documentation'
+    defaultLibrary = 'defaultLibrary'
+
+class DocumentDiagnosticReportKind(Enum):
+    """The document diagnostic report kinds.
+
+    @since 3.17.0"""
+    # since 3.17.0
+    Full = 'full'
+    """A diagnostic report with a full
+    set of problems."""
+    Unchanged = 'unchanged'
+    """A report indicating that the last
+    returned report is still accurate."""
+
+class ErrorCodes(Enum):
+    """Predefined error codes."""
+    ParseError = -32700
+    InvalidRequest = -32600
+    MethodNotFound = -32601
+    InvalidParams = -32602
+    InternalError = -32603
+    ServerNotInitialized = -32002
+    """Error code indicating that a server received a notification or
+    request before the server has received the `initialize` request."""
+    UnknownErrorCode = -32001
+
+class LSPErrorCodes(Enum):
+    RequestFailed = -32803
+    """A request failed but it was syntactically correct, e.g the
+    method name was known and the parameters were valid. The error
+    message should contain human readable information about why
+    the request failed.
+
+    @since 3.17.0"""
+    # since 3.17.0
+    ServerCancelled = -32802
+    """The server cancelled the request. This error code should
+    only be used for requests that explicitly support being
+    server cancellable.
+
+    @since 3.17.0"""
+    # since 3.17.0
+    ContentModified = -32801
+    """The server detected that the content of a document got
+    modified outside normal conditions. A server should
+    NOT send this error code if it detects a content change
+    in it unprocessed messages. The result even computed
+    on an older state might still be useful for the client.
+
+    If a client decides that a result is not of any use anymore
+    the client should cancel the request."""
+    RequestCancelled = -32800
+    """The client has canceled a request and a server has detected
+    the cancel."""
+
+class FoldingRangeKind(Enum):
+    """A set of predefined range kinds."""
+    Comment = 'comment'
+    """Folding range for a comment"""
+    Imports = 'imports'
+    """Folding range for an import or include"""
+    Region = 'region'
+    """Folding range for a region (e.g. `#region`)"""
+
+class SymbolKind(Enum):
+    """A symbol kind."""
+    File = 1
+    Module = 2
+    Namespace = 3
+    Package = 4
+    Class = 5
+    Method = 6
+    Property = 7
+    Field = 8
+    Constructor = 9
+    Enum = 10
+    Interface = 11
+    Function = 12
+    Variable = 13
+    Constant = 14
+    String = 15
+    Number = 16
+    Boolean = 17
+    Array = 18
+    Object = 19
+    Key = 20
+    Null = 21
+    EnumMember = 22
+    Struct = 23
+    Event = 24
+    Operator = 25
+    TypeParameter = 26
+
+class SymbolTag(Enum):
+    """Symbol tags are extra annotations that tweak the rendering of a symbol.
+
+    @since 3.16"""
+    # since 3.16
+    Deprecated = 1
+    """Render a symbol as obsolete, usually using a strike-out."""
+
+class UniquenessLevel(Enum):
+    """Moniker uniqueness level to define scope of the moniker.
+
+    @since 3.16.0"""
+    # since 3.16.0
+    document = 'document'
+    """The moniker is only unique inside a document"""
+    project = 'project'
+    """The moniker is unique inside a project for which a dump got created"""
+    group = 'group'
+    """The moniker is unique inside the group to which a project belongs"""
+    scheme = 'scheme'
+    """The moniker is unique inside the moniker scheme."""
+    global_ = 'global'
+    """The moniker is globally unique"""
+
+class MonikerKind(Enum):
+    """The moniker kind.
+
+    @since 3.16.0"""
+    # since 3.16.0
+    import_ = 'import'
+    """The moniker represent a symbol that is imported into a project"""
+    export = 'export'
+    """The moniker represents a symbol that is exported from a project"""
+    local = 'local'
+    """The moniker represents a symbol that is local to a project (e.g. a local
+    variable of a function, a class not visible outside the project, ...)"""
+
+class InlayHintKind(Enum):
+    """Inlay hint kinds.
+
+    @since 3.17.0"""
+    # since 3.17.0
+    Type = 1
+    """An inlay hint that for a type annotation."""
+    Parameter = 2
+    """An inlay hint that is for a parameter."""
+
+class MessageType(Enum):
+    """The message type"""
+    Error = 1
+    """An error message."""
+    Warning = 2
+    """A warning message."""
+    Info = 3
+    """An information message."""
+    Log = 4
+    """A log message."""
+    Debug = 5
+    """A debug message.
+
+    @since 3.18.0
+    @proposed"""
+    # since 3.18.0
+
+class TextDocumentSyncKind(Enum):
+    """Defines how the host (editor) should sync
+    document changes to the language server."""
+    None_ = 0
+    """Documents should not be synced at all."""
+    Full = 1
+    """Documents are synced by always sending the full content
+    of the document."""
+    Incremental = 2
+    """Documents are synced by sending the full content on open.
+    After that only incremental updates to the document are
+    send."""
+
+class TextDocumentSaveReason(Enum):
+    """Represents reasons why a text document is saved."""
+    Manual = 1
+    """Manually triggered, e.g. by the user pressing save, by starting debugging,
+    or by an API call."""
+    AfterDelay = 2
+    """Automatic after a delay."""
+    FocusOut = 3
+    """When the editor lost focus."""
+
+class CompletionItemKind(Enum):
+    """The kind of a completion entry."""
+    Text = 1
+    Method = 2
+    Function = 3
+    Constructor = 4
+    Field = 5
+    Variable = 6
+    Class = 7
+    Interface = 8
+    Module = 9
+    Property = 10
+    Unit = 11
+    Value = 12
+    Enum = 13
+    Keyword = 14
+    Snippet = 15
+    Color = 16
+    File = 17
+    Reference = 18
+    Folder = 19
+    EnumMember = 20
+    Constant = 21
+    Struct = 22
+    Event = 23
+    Operator = 24
+    TypeParameter = 25
+
+class CompletionItemTag(Enum):
+    """Completion item tags are extra annotations that tweak the rendering of a completion
+    item.
+
+    @since 3.15.0"""
+    # since 3.15.0
+    Deprecated = 1
+    """Render a completion as obsolete, usually using a strike-out."""
+
+class InsertTextFormat(Enum):
+    """Defines whether the insert text in a completion item should be interpreted as
+    plain text or a snippet."""
+    PlainText = 1
+    """The primary text to be inserted is treated as a plain string."""
+    Snippet = 2
+    """The primary text to be inserted is treated as a snippet.
+
+    A snippet can define tab stops and placeholders with `$1`, `$2`
+    and `${3:foo}`. `$0` defines the final tab stop, it defaults to
+    the end of the snippet. Placeholders with equal identifiers are linked,
+    that is typing in one will update others too.
+
+    See also: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#snippet_syntax"""
+
+class InsertTextMode(Enum):
+    """How whitespace and indentation is handled during completion
+    item insertion.
+
+    @since 3.16.0"""
+    # since 3.16.0
+    asIs = 1
+    """The insertion or replace strings is taken as it is. If the
+    value is multi line the lines below the cursor will be
+    inserted using the indentation defined in the string value.
+    The client will not apply any kind of adjustments to the
+    string."""
+    adjustIndentation = 2
+    """The editor adjusts leading whitespace of new lines so that
+    they match the indentation up to the cursor of the line for
+    which the item is accepted.
+
+    Consider a line like this: <2tabs><cursor><3tabs>foo. Accepting a
+    multi line completion item is indented using 2 tabs and all
+    following lines inserted will be indented using 2 tabs as well."""
+
+class DocumentHighlightKind(Enum):
+    """A document highlight kind."""
+    Text = 1
+    """A textual occurrence."""
+    Read = 2
+    """Read-access of a symbol, like reading a variable."""
+    Write = 3
+    """Write-access of a symbol, like writing to a variable."""
+
+class CodeActionKind(Enum):
+    """A set of predefined code action kinds"""
+    Empty = ''
+    """Empty kind."""
+    QuickFix = 'quickfix'
+    """Base kind for quickfix actions: 'quickfix'"""
+    Refactor = 'refactor'
+    """Base kind for refactoring actions: 'refactor'"""
+    RefactorExtract = 'refactor.extract'
+    """Base kind for refactoring extraction actions: 'refactor.extract'
+
+    Example extract actions:
+
+    - Extract method
+    - Extract function
+    - Extract variable
+    - Extract interface from class
+    - ..."""
+    RefactorInline = 'refactor.inline'
+    """Base kind for refactoring inline actions: 'refactor.inline'
+
+    Example inline actions:
+
+    - Inline function
+    - Inline variable
+    - Inline constant
+    - ..."""
+    RefactorMove = 'refactor.move'
+    """Base kind for refactoring move actions: `refactor.move`
+
+    Example move actions:
+
+    - Move a function to a new file
+    - Move a property between classes
+    - Move method to base class
+    - ...
+
+    @since 3.18.0
+    @proposed"""
+    # since 3.18.0
+    RefactorRewrite = 'refactor.rewrite'
+    """Base kind for refactoring rewrite actions: 'refactor.rewrite'
+
+    Example rewrite actions:
+
+    - Convert JavaScript function to class
+    - Add or remove parameter
+    - Encapsulate field
+    - Make method static
+    - Move method to base class
+    - ..."""
+    Source = 'source'
+    """Base kind for source actions: `source`
+
+    Source code actions apply to the entire file."""
+    SourceOrganizeImports = 'source.organizeImports'
+    """Base kind for an organize imports source action: `source.organizeImports`"""
+    SourceFixAll = 'source.fixAll'
+    """Base kind for auto-fix source actions: `source.fixAll`.
+
+    Fix all actions automatically fix errors that have a clear fix that do not require user input.
+    They should not suppress errors or perform unsafe fixes such as generating new types or classes.
+
+    @since 3.15.0"""
+    # since 3.15.0
+    Notebook = 'notebook'
+    """Base kind for all code actions applying to the entire notebook's scope. CodeActionKinds using
+    this should always begin with `notebook.`
+
+    @since 3.18.0"""
+    # since 3.18.0
+
+class CodeActionTag(Enum):
+    """Code action tags are extra annotations that tweak the behavior of a code action.
+
+    @since 3.18.0 - proposed"""
+    # since 3.18.0 - proposed
+    LLMGenerated = 1
+    """Marks the code action as LLM-generated."""
+
+class TraceValue(Enum):
+    Off = 'off'
+    """Turn tracing off."""
+    Messages = 'messages'
+    """Trace messages only."""
+    Verbose = 'verbose'
+    """Verbose message tracing."""
+
+class MarkupKind(Enum):
+    """Describes the content type that a client supports in various
+    result literals like `Hover`, `ParameterInfo` or `CompletionItem`.
+
+    Please note that `MarkupKinds` must not start with a `$`. This kinds
+    are reserved for internal usage."""
+    PlainText = 'plaintext'
+    """Plain text is supported as a content format"""
+    Markdown = 'markdown'
+    """Markdown is supported as a content format"""
+
+class LanguageKind(Enum):
+    """Predefined Language kinds
+    @since 3.18.0"""
+    # since 3.18.0
+    ABAP = 'abap'
+    WindowsBat = 'bat'
+    BibTeX = 'bibtex'
+    Clojure = 'clojure'
+    Coffeescript = 'coffeescript'
+    C = 'c'
+    CPP = 'cpp'
+    CSharp = 'csharp'
+    CSS = 'css'
+    D = 'd'
+    """@since 3.18.0
+    @proposed"""
+    # since 3.18.0
+    Delphi = 'pascal'
+    """@since 3.18.0
+    @proposed"""
+    # since 3.18.0
+    Diff = 'diff'
+    Dart = 'dart'
+    Dockerfile = 'dockerfile'
+    Elixir = 'elixir'
+    Erlang = 'erlang'
+    FSharp = 'fsharp'
+    GitCommit = 'git-commit'
+    GitRebase = 'rebase'
+    Go = 'go'
+    Groovy = 'groovy'
+    Handlebars = 'handlebars'
+    Haskell = 'haskell'
+    HTML = 'html'
+    Ini = 'ini'
+    Java = 'java'
+    JavaScript = 'javascript'
+    JavaScriptReact = 'javascriptreact'
+    JSON = 'json'
+    LaTeX = 'latex'
+    Less = 'less'
+    Lua = 'lua'
+    Makefile = 'makefile'
+    Markdown = 'markdown'
+    ObjectiveC = 'objective-c'
+    ObjectiveCPP = 'objective-cpp'
+    Pascal = 'pascal'
+    """@since 3.18.0
+    @proposed"""
+    # since 3.18.0
+    Perl = 'perl'
+    Perl6 = 'perl6'
+    PHP = 'php'
+    Powershell = 'powershell'
+    Pug = 'jade'
+    Python = 'python'
+    R = 'r'
+    Razor = 'razor'
+    Ruby = 'ruby'
+    Rust = 'rust'
+    SCSS = 'scss'
+    SASS = 'sass'
+    Scala = 'scala'
+    ShaderLab = 'shaderlab'
+    ShellScript = 'shellscript'
+    SQL = 'sql'
+    Swift = 'swift'
+    TypeScript = 'typescript'
+    TypeScriptReact = 'typescriptreact'
+    TeX = 'tex'
+    VisualBasic = 'vb'
+    XML = 'xml'
+    XSL = 'xsl'
+    YAML = 'yaml'
+
+class InlineCompletionTriggerKind(Enum):
+    """Describes how an {@link InlineCompletionItemProvider inline completion provider} was triggered.
+
+    @since 3.18.0
+    @proposed"""
+    # since 3.18.0
+    Invoked = 1
+    """Completion was triggered explicitly by a user gesture."""
+    Automatic = 2
+    """Completion was triggered automatically while editing."""
+
+class PositionEncodingKind(Enum):
+    """A set of predefined position encoding kinds.
+
+    @since 3.17.0"""
+    # since 3.17.0
+    UTF8 = 'utf-8'
+    """Character offsets count UTF-8 code units (e.g. bytes)."""
+    UTF16 = 'utf-16'
+    """Character offsets count UTF-16 code units.
+
+    This is the default and must always be supported
+    by servers"""
+    UTF32 = 'utf-32'
+    """Character offsets count UTF-32 code units.
+
+    Implementation note: these are the same as Unicode codepoints,
+    so this `PositionEncodingKind` may also be used for an
+    encoding-agnostic representation of character offsets."""
+
+class FileChangeType(Enum):
+    """The file event type"""
+    Created = 1
+    """The file got created."""
+    Changed = 2
+    """The file got changed."""
+    Deleted = 3
+    """The file got deleted."""
+
+class WatchKind(Enum):
+    Create = 1
+    """Interested in create events."""
+    Change = 2
+    """Interested in change events"""
+    Delete = 4
+    """Interested in delete events"""
+
+class DiagnosticSeverity(Enum):
+    """The diagnostic's severity."""
+    Error = 1
+    """Reports an error."""
+    Warning = 2
+    """Reports a warning."""
+    Information = 3
+    """Reports an information."""
+    Hint = 4
+    """Reports a hint."""
+
+class DiagnosticTag(Enum):
+    """The diagnostic tags.
+
+    @since 3.15.0"""
+    # since 3.15.0
+    Unnecessary = 1
+    """Unused or unnecessary code.
+
+    Clients are allowed to render diagnostics with this tag faded out instead of having
+    an error squiggle."""
+    Deprecated = 2
+    """Deprecated or obsolete code.
+
+    Clients are allowed to rendered diagnostics with this tag strike through."""
+
+class CompletionTriggerKind(Enum):
+    """How a completion was triggered"""
+    Invoked = 1
+    """Completion was triggered by typing an identifier (24x7 code
+    complete), manual invocation (e.g Ctrl+Space) or via API."""
+    TriggerCharacter = 2
+    """Completion was triggered by a trigger character specified by
+    the `triggerCharacters` properties of the `CompletionRegistrationOptions`."""
+    TriggerForIncompleteCompletions = 3
+    """Completion was re-triggered as current completion list is incomplete"""
+
+class ApplyKind(Enum):
+    """Defines how values from a set of defaults and an individual item will be
+    merged.
+
+    @since 3.18.0"""
+    # since 3.18.0
+    Replace = 1
+    """The value from the individual item (if provided and not `null`) will be
+    used instead of the default."""
+    Merge = 2
+    """The value from the item will be merged with the default.
+
+    The specific rules for mergeing values are defined against each field
+    that supports merging."""
+
+class SignatureHelpTriggerKind(Enum):
+    """How a signature help was triggered.
+
+    @since 3.15.0"""
+    # since 3.15.0
+    Invoked = 1
+    """Signature help was invoked manually by the user or by a command."""
+    TriggerCharacter = 2
+    """Signature help was triggered by a trigger character."""
+    ContentChange = 3
+    """Signature help was triggered by the cursor moving or by the document content changing."""
+
+class CodeActionTriggerKind(Enum):
+    """The reason why code actions were requested.
+
+    @since 3.17.0"""
+    # since 3.17.0
+    Invoked = 1
+    """Code actions were explicitly requested by the user or by an extension."""
+    Automatic = 2
+    """Code actions were requested automatically.
+
+    This typically happens when current selection in a file changes, but can
+    also be triggered when file content changes."""
+
+class FileOperationPatternKind(Enum):
+    """A pattern kind describing if a glob pattern matches a file a folder or
+    both.
+
+    @since 3.16.0"""
+    # since 3.16.0
+    file = 'file'
+    """The pattern matches a file only."""
+    folder = 'folder'
+    """The pattern matches a folder only."""
+
+class NotebookCellKind(Enum):
+    """A notebook cell kind.
+
+    @since 3.17.0"""
+    # since 3.17.0
+    Markup = 1
+    """A markup-cell is formatted source that is used for display."""
+    Code = 2
+    """A code-cell is source code."""
+
+class ResourceOperationKind(Enum):
+    Create = 'create'
+    """Supports creating new files and folders."""
+    Rename = 'rename'
+    """Supports renaming existing files and folders."""
+    Delete = 'delete'
+    """Supports deleting existing files and folders."""
+
+class FailureHandlingKind(Enum):
+    Abort = 'abort'
+    """Applying the workspace change is simply aborted if one of the changes provided
+    fails. All operations executed before the failing operation stay executed."""
+    Transactional = 'transactional'
+    """All operations are executed transactional. That means they either all
+    succeed or no changes at all are applied to the workspace."""
+    TextOnlyTransactional = 'textOnlyTransactional'
+    """If the workspace edit contains only textual file changes they are executed transactional.
+    If resource changes (create, rename or delete file) are part of the change the failure
+    handling strategy is abort."""
+    Undo = 'undo'
+    """The client tries to undo the operations already executed. But there is no
+    guarantee that this is succeeding."""
+
+class PrepareSupportDefaultBehavior(Enum):
+    Identifier = 1
+    """The client's default behavior is to select the identifier
+    according the to language's syntax rule."""
+
+class TokenFormat(Enum):
+    Relative = 'relative'
 
 @dataclass
 class TextDocumentIdentifier:
