@@ -56,13 +56,9 @@ class PrepareRenameService:
             if name.in_builtin_module():
                 raise ValueError("unable rename 'builtin'")
 
-            if (path := name.module_path) and path.is_relative_to(
-                self.params.workspace_path
-            ):
+            path = Path(self.params.workspace_path, name.module_path).resolve()
+            if not path.is_file():
                 # only rename object inside of project
-                continue
-
-            else:
                 raise ValueError("unable rename object referenced to external project")
 
         start_line, start_col = leaf.start_pos
