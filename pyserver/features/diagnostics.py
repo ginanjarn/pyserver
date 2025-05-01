@@ -80,7 +80,7 @@ class PyflakesDiagnostic:
     def _get_warnings(self, node: AST, filename: str) -> Iterator[Diagnostic]:
 
         w = checker.Checker(node, filename=filename)
-        w.messages.sort(key=lambda m: m.lineno)
+        w.messages.sort(key=lambda m: (m.lineno, m.col))
 
         leaf_getter = LeafGetter(node)
 
@@ -100,14 +100,12 @@ class LeafGetter:
     """Get leaf from a node without check from beginning"""
 
     def __init__(self, node: AST) -> None:
-        filtered = [n for n in walk(node) if hasattr(n, "lineno")]
-        self.nodes = sorted(filtered, key=self.node_sort_key)
+        # Only select node which has location
+        self.nodes = [n for n in walk(node) if hasattr(n, "lineno")]
+        self.nodes.sort(key=lambda n: (n.lineno, n.col_offset))
 
         self._previous_location = RowCol(0, 0)
         self._iter_index = 0
-
-    def node_sort_key(self, node: AST) -> RowCol:
-        return RowCol(node.lineno, node.col_offset)
 
     def get_leaf_at(self, location: RowCol) -> Optional[AST]:
         """get leaf at location"""
@@ -121,23 +119,25 @@ class LeafGetter:
         if leaf := self._get_leaf(self.nodes[current_index:], location):
             return leaf
 
-        # reverse the list to find nearest parent from end
-        if leaf := self._get_leaf(reversed(self.nodes[:current_index]), location):
-            self._iter_index = current_index
+        # get from nearest parent
+        if leaf := self._get_leaf(
+            reversed(self.nodes[:current_index]), location, increment_index=False
+        ):
             return leaf
 
         # revert index if not found
         self._iter_index = current_index
         return None
 
-    def _get_leaf(self, nodes: List[AST], location: RowCol) -> Optional[AST]:
+    def _get_leaf(
+        self, nodes: List[AST], location: RowCol, *, increment_index: bool = True
+    ) -> Optional[AST]:
         for node in nodes:
-            self._iter_index += 1
-            try:
-                start = (node.lineno, node.col_offset)
-                end = (node.end_lineno, node.end_col_offset)
-            except AttributeError:
-                continue
+            if increment_index:
+                self._iter_index += 1
+
+            start = (node.lineno, node.col_offset)
+            end = (node.end_lineno, node.end_col_offset)
 
             if start[0] == location[0] and (start[1] <= location[1] <= end[1]):
                 # find narrower node
