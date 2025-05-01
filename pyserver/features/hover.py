@@ -4,10 +4,11 @@ from dataclasses import dataclass
 from html import escape
 from io import StringIO
 from pathlib import Path
+from textwrap import indent
 from typing import List, Dict, Any
 
 from jedi import Script, Project
-from jedi.api.classes import Name
+from jedi.api.classes import Name, Signature
 
 from pyserver import errors
 from pyserver.uri import uri_to_path
@@ -47,6 +48,23 @@ class HoverService:
 
         return []
 
+    @staticmethod
+    def signature_to_string(signature: Signature) -> str:
+        signature_string = signature.to_string()
+        if len(signature_string) < 80:
+            return signature_string
+
+        # Flatten long signature
+        name = signature.name
+        params = ",\n".join([p.to_string() for p in signature.params])
+        try:
+            annotation = signature._signature.annotation_string
+        except Exception:
+            annotation = ""
+
+        annotation = f" -> {annotation}" if annotation else ""
+        return f"{name}(\n{indent(params, prefix='  ')}\n){annotation}"
+
     def build_item(self, name: Name):
         buffer = StringIO()
         buffer.write(f"### {name.type} `{name.name}`\n\n")
@@ -55,8 +73,10 @@ class HoverService:
             buffer.write(f"module: `{module_name}`\n\n")
 
         if name.type in {"class", "function"}:
-            if signature := name._get_docstring_signature():
-                buffer.write(f"```python\n{signature}\n```\n\n")
+            if signatures := name.get_signatures():
+                signatures = [self.signature_to_string(s) for s in signatures]
+                signatures = "\n".join(signatures)
+                buffer.write(f"```python\n{signatures}\n```\n\n")
 
         if docstring := name._get_docstring():
             buffer.write(f"<pre>{escape(docstring, quote=False)}</pre>\n\n")

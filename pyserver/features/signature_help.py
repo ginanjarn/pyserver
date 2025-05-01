@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Any
+from textwrap import indent
+from typing import List, Dict, Any, Iterator
 
 from jedi import Script, Project
 from jedi.api.classes import Signature
@@ -38,21 +39,27 @@ class SignatureHelpService:
         row, col = self.params.jedi_rowcol()
         return self.script.get_signatures(row, col)
 
-    def build_item(self, signatures: List[Signature]) -> List[dict]:
-        # prevent generate signature with same label
-        current_label = None
+    @staticmethod
+    def signature_to_string(signature: Signature) -> str:
+        signature_string = signature.to_string()
+        if len(signature_string) < 80:
+            return signature_string
 
-        # for signature in signatures:
-        def build_signature(signature: Signature):
-            nonlocal current_label
+        # Flatten long signature
+        name = signature.name
+        params = ",\n".join([p.to_string() for p in signature.params])
+        try:
+            annotation = signature._signature.annotation_string
+        except Exception:
+            annotation = ""
 
-            label = signature.to_string()
-            if label == current_label:
-                return {}
-            # else
-            current_label = label
+        annotation = f" -> {annotation}" if annotation else ""
+        return f"{name}(\n{indent(params, prefix='  ')}\n){annotation}"
 
-            return {
+    def build_item(self, signatures: List[Signature]) -> Iterator[dict]:
+        for signature in signatures:
+            label = self.signature_to_string(signature)
+            yield {
                 "label": label,
                 "documentation": signature.docstring(raw=True),
                 "parameters": [
@@ -61,24 +68,17 @@ class SignatureHelpService:
                 ],
             }
 
-        return [build_signature(signature) for signature in signatures]
-
     def get_result(self) -> Dict[str, Any]:
         try:
             candidates = self.execute()
         except Exception:
             candidates = []
 
-        signatures = self.build_item(candidates)
-        # on duplication signatures return empty dict
-        signatures = [s for s in signatures if s]  # remove the empty dict
-
-        result = {
-            "signatures": signatures,
+        return {
+            "signatures": list(self.build_item(candidates)),
             "activeSignature": 0,
             "activeParameters": 0,
         }
-        return result
 
 
 def textdocument_signaturehelp(session: Session, params: dict) -> None:
