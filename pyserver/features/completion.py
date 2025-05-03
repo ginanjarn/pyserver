@@ -42,26 +42,31 @@ class CompletionService:
             path=self.params.file_path,
             project=Project(self.params.workspace_path),
         )
-
-        cursor_leaf = self.script._module_node.get_leaf_for_position(
-            params.jedi_rowcol()
-        )
-        cursor_line = self.script._code_lines[params.line]
-
-        self.text_edit_range = self._get_replaced_text_range(
-            params.jedi_rowcol(), cursor_leaf
-        )
-        self.is_valid_scope = self._check_is_valid_scope(cursor_leaf)
-        self.is_append_bracket = self._check_is_append_bracket(cursor_line, cursor_leaf)
+        self.text_edit_range = {}
+        self.is_append_bracket = False
 
     def execute(self) -> List[Completion]:
-        if not self.is_valid_scope:
+        jedi_rowcol = self.params.jedi_rowcol()
+        cursor_leaf = self.script._module_node.get_leaf_for_position(jedi_rowcol)
+
+        self.text_edit_range = self._get_replaced_text_range(jedi_rowcol, cursor_leaf)
+
+        self.is_append_bracket = self._check_is_append_bracket(
+            self.script._code_lines[self.params.line],  # Text line at cursor location
+            cursor_leaf,
+        )
+
+        if not self._is_return_completion(cursor_leaf):
             return []
 
-        row, col = self.params.jedi_rowcol()
-        return self.script.complete(row, col)
+        return self.script.complete(*jedi_rowcol)
 
-    def _check_is_valid_scope(self, leaf: Optional[Leaf]) -> bool:
+    @staticmethod
+    def _is_return_completion(leaf: Optional[Leaf]) -> bool:
+        """check if return completion
+        For example if leaf is literal or number, completion is unavailable.
+        """
+
         if not leaf:
             return True
 
@@ -98,8 +103,8 @@ class CompletionService:
         if any(
             [
                 line[:1] == "@",  # decorator
-                line[:6] == "import",  # import
-                line[:4] == "from",  # from .. import
+                line[:7] == "import ",  # import
+                line[:5] == "from ",  # from .. import
             ]
         ):
             return False
