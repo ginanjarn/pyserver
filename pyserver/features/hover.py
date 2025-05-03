@@ -9,6 +9,7 @@ from typing import List, Dict, Any
 
 from jedi import Script, Project
 from jedi.api.classes import Name, Signature
+from parso.tree import Leaf
 
 from pyserver import errors
 from pyserver.uri import uri_to_path
@@ -36,17 +37,27 @@ class HoverService:
             path=self.params.file_path,
             project=Project(self.params.workspace_path),
         )
-        self.identifier_leaf = self.script._module_node.get_leaf_for_position(
-            self.params.jedi_rowcol()
-        )
+        self.leaf_range = {}
 
     def execute(self) -> List[Name]:
-        # only show documentation for keyword and identifier
-        if (leaf := self.identifier_leaf) and leaf.type in {"keyword", "name"}:
-            row, col = self.params.jedi_rowcol()
-            return self.script.help(row, col)
+        leaf = self.script._module_node.get_leaf_for_position(self.params.jedi_rowcol())
 
-        return []
+        # only show documentation for keyword and identifier
+        if (not leaf) or leaf.type not in {"keyword", "name"}:
+            return []
+
+        self.leaf_range = self._get_leaf_range(leaf)
+
+        row, col = self.params.jedi_rowcol()
+        return self.script.help(row, col)
+
+    @staticmethod
+    def _get_leaf_range(leaf: Leaf) -> Dict[str, Any]:
+        start, end = leaf.start_pos, leaf.end_pos
+        return {
+            "start": {"line": start[0] - 1, "character": start[1]},
+            "end": {"line": end[0] - 1, "character": end[1]},
+        }
 
     @staticmethod
     def signature_to_string(signature: Signature) -> str:
@@ -65,7 +76,7 @@ class HoverService:
         annotation = f" -> {annotation}" if annotation else ""
         return f"{name}(\n{indent(params, prefix='  ')}\n){annotation}"
 
-    def build_item(self, name: Name):
+    def build_content(self, name: Name) -> str:
         buffer = StringIO()
         buffer.write(f"### {name.type} `{name.name}`\n\n")
 
@@ -95,21 +106,12 @@ class HoverService:
         # transform as rpc
         name_object = candidates[0]
 
-        start = self.identifier_leaf.start_pos
-        end = self.identifier_leaf.end_pos
-
         result = {
             "contents": {
                 "kind": "markdown",
-                "value": self.build_item(name_object),
+                "value": self.build_content(name_object),
             },
-            "range": {
-                "start": {"line": start[0] - 1, "character": start[1]},
-                "end": {
-                    "line": end[0] - 1,
-                    "character": end[1],
-                },
-            },
+            "range": self.leaf_range,
         }
         return result
 
