@@ -1,6 +1,5 @@
 """formatting service"""
 
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, List
@@ -26,17 +25,10 @@ class FormattingService:
     def execute(self) -> str:
         text = self.params.text
         try:
-            new_str = black.format_str(text, mode=black.FileMode())
+            return black.format_str(text, mode=black.Mode())
 
-        except black.NothingChanged:
+        except (black.NothingChanged, black.InvalidInput):
             return text
-
-        except Exception as err:
-            print(err, file=sys.stderr)
-            return text
-
-        else:
-            return new_str
 
     def get_result(self) -> List[Dict[str, Any]]:
         formatted_str = self.execute()
