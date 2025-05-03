@@ -33,13 +33,12 @@ class DefinitionService:
             path=self.params.file_path,
             project=Project(self.params.workspace_path),
         )
-        self.identifier_leaf = self.script._module_node.get_leaf_for_position(
-            self.params.jedi_rowcol()
-        )
 
-    def execute(self) -> List[dict]:
+    def execute(self) -> List[Name]:
+        leaf = self.script._module_node.get_leaf_for_position(self.params.jedi_rowcol())
+
         # only show definition for identifier
-        if (not self.identifier_leaf) or self.identifier_leaf.type != "name":
+        if (not leaf) or leaf.type != "name":
             return []
 
         row, col = self.params.jedi_rowcol()
