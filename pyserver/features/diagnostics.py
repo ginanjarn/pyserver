@@ -139,7 +139,7 @@ class LeafGetter:
             start = (node.lineno, node.col_offset)
             end = (node.end_lineno, node.end_col_offset)
 
-            if start[0] == location[0] and (start[1] <= location[1] <= end[1]):
+            if start <= location <= end:
                 # find narrower node
                 current_index = self._iter_index
                 if narrower := self._get_leaf(self.nodes[current_index:], location):
@@ -149,7 +149,7 @@ class LeafGetter:
                 self._iter_index = current_index
                 return node
 
-            if start > location:
+            if start > location and increment_index:
                 return None
 
         return None
