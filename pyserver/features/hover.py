@@ -68,12 +68,10 @@ class HoverService:
         # Flatten long signature
         name = signature.name
         params = ",\n".join([p.to_string() for p in signature.params])
-        try:
-            annotation = signature._signature.annotation_string
-        except Exception:
-            annotation = ""
+        annotation = ""
+        if return_type := getattr(signature._signature, "annotation_string"):
+            annotation = f" -> {return_type}"
 
-        annotation = f" -> {annotation}" if annotation else ""
         return f"{name}(\n{indent(params, prefix='  ')}\n){annotation}"
 
     def build_content(self, name: Name) -> str:
