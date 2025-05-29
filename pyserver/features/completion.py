@@ -165,7 +165,17 @@ class CompletionService:
 
             if signatures:
                 visible_signature = signatures[0]
-                signature_text = visible_signature.to_string()
+
+                params = ", ".join([p.to_string() for p in visible_signature.params])
+                annotation = ""
+                if return_type := getattr(
+                    visible_signature._signature, "annotation_string"
+                ):
+                    # normalize to single line
+                    return_type = " ".join(return_type.split())
+                    annotation = f" -> {return_type}"
+
+                signature_text = f"{text}({params}){annotation}"
 
             # append bracket for function
             if all(
