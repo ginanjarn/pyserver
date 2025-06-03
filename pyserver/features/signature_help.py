@@ -1,5 +1,6 @@
 """signature help service"""
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
@@ -80,6 +81,9 @@ class SignatureHelpService:
 
 
 def textdocument_signaturehelp(session: Session, params: dict) -> None:
+    # Improve completion result if called after request completion
+    time.sleep(0.5)
+
     try:
         file_path = uri_to_path(params["textDocument"]["uri"])
         line = params["position"]["line"]
