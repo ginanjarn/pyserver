@@ -1,6 +1,5 @@
 """command handler"""
 
-from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, Dict, Any, Optional
 
@@ -10,20 +9,12 @@ from pyserver.uri import uri_to_path
 from pyserver.session import Session, SessionStatus
 
 
-class Handler(ABC):
-    """base handler"""
-
-    @abstractmethod
-    def handle(self, method: str, params: dict):
-        """handle message"""
-
-
 MethodName = str
-RPCParams = Dict[str, Any]
-HandlerCallback = Callable[[Session, RPCParams], None]
+Params = dict | list | None
+SessionHandleFunction = Callable[[Session, Params], Any]
 
 
-class LSPHandler(Handler):
+class LSPHandler:
     """LSPHandler implementation"""
 
     def __init__(self):
@@ -33,12 +24,14 @@ class LSPHandler(Handler):
         InitializeManager(self.handler_map)
         DocumentSynchronizer(self.handler_map)
 
-    def register_handlers(self, mapping: Dict[MethodName, HandlerCallback], /) -> None:
+    def register_handlers(
+        self, mapping: Dict[MethodName, SessionHandleFunction], /
+    ) -> None:
         self.handler_map.update(mapping)
 
     noninitialized_methods = frozenset({"initialize", "initialized", "shutdown"})
 
-    def handle(self, method: str, params: dict) -> Optional[Any]:
+    def handle(self, method: MethodName, params: Params) -> Optional[Any]:
         if self.session.status is SessionStatus.ShuttingDown:
             raise errors.InvalidRequest("'exit' command is required")
 

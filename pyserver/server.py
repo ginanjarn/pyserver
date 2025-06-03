@@ -3,10 +3,9 @@
 import logging
 import queue
 import threading
-from typing import Optional, Any, Callable
+from typing import Any, Callable
 
 from pyserver import errors
-from pyserver.handler import Handler
 from pyserver.message import (
     Message,
     Notification,
@@ -19,14 +18,21 @@ from pyserver.transport import Transport
 
 LOGGER = logging.getLogger("pyserver")
 
+Id = int
+MethodName = str
+Params = list | dict | None
+Result = list | dict | None
+Error = dict | None
+HandleFunction = Callable[[MethodName, Params], Result]
+
 
 class RequestManager:
     """RequestHandler executed outside main loop to make request cancelable"""
 
     def __init__(
         self,
-        handle_function: Callable[[int, str, dict], Any],
-        response_callback: Callable[[int, Any, Any], None],
+        handle_function: HandleFunction,
+        response_callback: Callable[[Id, Result, Error], None],
     ):
         self.request_queue = queue.Queue()
         self.canceled_requests = set()
@@ -40,7 +46,7 @@ class RequestManager:
     def add(self, message: Request):
         self.request_queue.put(message)
 
-    def cancel(self, request_id: int):
+    def cancel(self, request_id: Id):
         with self.cancel_lock:
             self.canceled_requests.add(request_id)
 
@@ -52,7 +58,7 @@ class RequestManager:
             while not self.request_queue.empty():
                 self.request_queue.get_nowait()
 
-    def check_canceled(self, request_id: int):
+    def check_canceled(self, request_id: Id):
         # 'canceled_requests' data may be changed during iteration
         with self.cancel_lock:
             if request_id in self.canceled_requests:
@@ -130,7 +136,7 @@ class DiagnosticsPublisher:
 
     def __init__(
         self,
-        handle_function: Callable[[str, dict], Any],
+        handle_function: HandleFunction,
         notification_callback: Callable[[Any, Any], None],
     ) -> None:
         self.handle_function = handle_function
@@ -155,7 +161,7 @@ class DiagnosticsPublisher:
             self.event.clear()
             self._publish_diagnostics(self.target_params)
 
-    def _publish_diagnostics(self, params: dict):
+    def _publish_diagnostics(self, params: Params):
         try:
             diagnostics_params = self.handle_function(
                 "textDocument/publishDiagnostics", params
@@ -187,17 +193,17 @@ EXIT_ERROR = 1
 class LSPServer:
     """LSP server"""
 
-    def __init__(self, transport: Transport, handler: Handler, /):
+    def __init__(self, transport: Transport, handle_func: HandleFunction, /):
         self.transport = transport
-        self.handler = handler
+        self.handle_func = handle_func
 
         # client request handler
-        self.request_manager = RequestManager(self.handler.handle, self.send_response)
+        self.request_manager = RequestManager(self.handle_func, self.send_response)
         self.server_request_manager = ServerRequestManager()
 
         # diagnostic publisher
         self.diagnostics_publisher = DiagnosticsPublisher(
-            self.handler.handle, self.send_notification
+            self.handle_func, self.send_notification
         )
 
     def send_message(self, message: Message):
@@ -205,16 +211,14 @@ class LSPServer:
         content = dumps(message, as_bytes=True)
         self.transport.write(content)
 
-    def send_request(self, method: str, params: Any):
+    def send_request(self, method: MethodName, params: Params):
         request_id = self.server_request_manager.add(method)
         self.send_message(Request(request_id, method, params))
 
-    def send_response(
-        self, request_id: int, result: Optional[Any] = None, error: Optional[Any] = None
-    ):
+    def send_response(self, request_id: Id, result: Result = None, error: Error = None):
         self.send_message(Response(request_id, result, error))
 
-    def send_notification(self, method: str, params: Any):
+    def send_notification(self, method: MethodName, params: Params):
         self.send_message(Notification(method, params))
 
     def listen(self):
@@ -266,7 +270,7 @@ class LSPServer:
             self.request_manager.cancel(params["id"])
             return
 
-        self.handler.handle(method, params)
+        self.handle_func(method, params)
 
         if method in {
             "textDocument/didOpen",
@@ -287,9 +291,9 @@ class LSPServer:
             self.exit(EXIT_ERROR)
             return
 
-        self.handler.handle(method, message)
+        self.handle_func(method, message)
 
-    def exec_message(self, message: Message) -> Optional[Any]:
+    def exec_message(self, message: Message) -> None:
         exec_map = {
             Notification: self.exec_notification,
             Request: self.exec_request,

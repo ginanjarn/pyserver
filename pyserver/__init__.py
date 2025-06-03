@@ -61,7 +61,7 @@ def main():
     handler_ = LSPHandler()
     load_features(handler_)
 
-    srv = LSPServer(transport_, handler_)
+    srv = LSPServer(transport_, handler_.handle)
     srv.listen()
 
 
