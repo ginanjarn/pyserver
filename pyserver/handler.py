@@ -28,29 +28,23 @@ class LSPHandler(Handler):
 
     def __init__(self):
         self.session = Session()
+        self.handler_map = {}
 
-        self.handler_map = {
-            "initialize": self.initialize,
-            "initialized": self.initialized,
-            "shutdown": self.shutdown,
-            "textDocument/didOpen": self.textdocument_didopen,
-            "textDocument/didChange": self.textdocument_didchange,
-            "textDocument/didSave": self.textdocument_didsave,
-            "textDocument/didClose": self.textdocument_didclose,
-        }
+        InitializeManager(self.handler_map)
+        DocumentSynchronizer(self.handler_map)
 
     def register_handlers(self, mapping: Dict[MethodName, HandlerCallback], /) -> None:
         self.handler_map.update(mapping)
 
+    noninitialized_methods = frozenset({"initialize", "initialized", "shutdown"})
+
     def handle(self, method: str, params: dict) -> Optional[Any]:
-        if self.session.status == SessionStatus.ShuttingDown:
+        if self.session.status is SessionStatus.ShuttingDown:
             raise errors.InvalidRequest("'exit' command is required")
 
-        elif self.session.status == SessionStatus.NotInitialized and method not in {
-            "initialize",
-            "initialized",
-            "shutdown",
-        }:
+        if (
+            self.session.status is SessionStatus.NotInitialized
+        ) and method not in self.noninitialized_methods:
             raise errors.ServerNotInitialized("server not initialized")
 
         try:
@@ -61,19 +55,20 @@ class LSPHandler(Handler):
         # external handler
         return func(self.session, params)
 
-    def initialized(self, session: Session, params: dict) -> None:
-        if not session.status == SessionStatus.Initializing:
-            raise errors.InternalError("server not initialized")
 
-        session.status == SessionStatus.Initialized
-        return None
+class InitializeManager:
 
-    def shutdown(self, session: Session, params: dict) -> None:
-        session.status == SessionStatus.ShuttingDown
-        return None
+    def __init__(self, handler_map: dict):
+        handler_map.update(
+            {
+                "initialize": self.initialize,
+                "initialized": self.initialized,
+                "shutdown": self.shutdown,
+            }
+        )
 
     def initialize(self, session: Session, params: dict) -> dict:
-        if session.status == SessionStatus.Initialized:
+        if session.status is SessionStatus.Initialized:
             raise errors.InternalError("server has initialized")
 
         try:
@@ -93,7 +88,31 @@ class LSPHandler(Handler):
 
         return {}
 
-    def textdocument_didopen(self, session: Session, params: dict) -> None:
+    def initialized(self, session: Session, params: dict) -> None:
+        if session.status is not SessionStatus.Initializing:
+            raise errors.InternalError("server not initialized")
+
+        session.status == SessionStatus.Initialized
+        return None
+
+    def shutdown(self, session: Session, params: dict) -> None:
+        session.status == SessionStatus.ShuttingDown
+        return None
+
+
+class DocumentSynchronizer:
+
+    def __init__(self, handler_map: dict):
+        handler_map.update(
+            {
+                "textDocument/didOpen": self.didopen,
+                "textDocument/didChange": self.didchange,
+                "textDocument/didSave": self.didsave,
+                "textDocument/didClose": self.didclose,
+            }
+        )
+
+    def didopen(self, session: Session, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
             language_id = params["textDocument"]["languageId"]
@@ -105,7 +124,7 @@ class LSPHandler(Handler):
 
         session.add_document(file_path, language_id, version, text)
 
-    def textdocument_didsave(self, session: Session, params: dict) -> None:
+    def didsave(self, session: Session, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
@@ -114,7 +133,7 @@ class LSPHandler(Handler):
         if document := session.get_document(file_path):
             document.is_saved = True
 
-    def textdocument_didclose(self, session: Session, params: dict) -> None:
+    def didclose(self, session: Session, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
         except KeyError as err:
@@ -122,7 +141,7 @@ class LSPHandler(Handler):
 
         session.remove_document(file_path)
 
-    def textdocument_didchange(self, session: Session, params: dict) -> None:
+    def didchange(self, session: Session, params: dict) -> None:
         try:
             file_path = uri_to_path(params["textDocument"]["uri"])
             version = params["textDocument"]["version"]
