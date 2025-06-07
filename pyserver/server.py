@@ -142,13 +142,11 @@ class DiagnosticsPublisher:
         self.handle_function = handle_function
         self.send_notification = notification_callback
 
-        self.event = threading.Event()
-        self.target_params = None
+        self._target_queue = queue.Queue()
 
     def publish(self, params: dict) -> None:
         """"""
-        self.target_params = params
-        self.event.set()
+        self._target_queue.put(params)
 
     def run(self) -> None:
         """"""
@@ -156,10 +154,8 @@ class DiagnosticsPublisher:
         thread.start()
 
     def _run_task(self):
-        while True:
-            self.event.wait()
-            self.event.clear()
-            self._publish_diagnostics(self.target_params)
+        while params := self._target_queue.get():
+            self._publish_diagnostics(params)
 
     def _publish_diagnostics(self, params: Params):
         try:
