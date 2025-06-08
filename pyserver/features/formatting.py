@@ -1,4 +1,4 @@
-"""formatting service"""
+"""document formatting"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,7 +18,7 @@ class FormattingParams:
     text: str
 
 
-class FormattingService:
+class FormattingProvider:
     def __init__(self, params: FormattingParams):
         self.params = params
 
@@ -30,7 +30,7 @@ class FormattingService:
         except (black.NothingChanged, black.InvalidInput):
             return text
 
-    def get_result(self) -> List[Dict[str, Any]]:
+    def get_formatted(self) -> List[Dict[str, Any]]:
         formatted_str = self.execute()
         return diffutils.get_text_changes(self.params.text, formatted_str)
 
@@ -46,5 +46,5 @@ def textdocument_formatting(session: Session, params: dict) -> None:
         document.file_path,
         document.text,
     )
-    service = FormattingService(params)
-    return service.get_result()
+    service = FormattingProvider(params)
+    return service.get_formatted()

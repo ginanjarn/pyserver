@@ -1,4 +1,4 @@
-"""prepare rename service"""
+"""document prepare rename"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,7 +33,7 @@ class Identifier:
     text: str
 
 
-class PrepareRenameService:
+class PrepareRenameProvider:
     def __init__(self, params: PrepareRenameParams):
         self.params = params
         self.script = Script(
@@ -65,7 +65,7 @@ class PrepareRenameService:
         end_line, end_col = leaf.end_pos
         return Identifier(start_line - 1, start_col, end_line - 1, end_col, leaf.value)
 
-    def get_result(self) -> Optional[Dict[str, Any]]:
+    def get_rename_target(self) -> Optional[Dict[str, Any]]:
         candidate = self.execute()
         if not candidate:
             return None
@@ -101,5 +101,5 @@ def textdocument_preparerename(session: Session, params: dict) -> None:
         line,
         character,
     )
-    service = PrepareRenameService(params)
-    return service.get_result()
+    service = PrepareRenameProvider(params)
+    return service.get_rename_target()

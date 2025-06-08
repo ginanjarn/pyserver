@@ -1,4 +1,4 @@
-"""completion service"""
+"""document diagnostics"""
 
 from ast import parse, AST, walk
 from dataclasses import dataclass
@@ -170,7 +170,7 @@ def get_leaf_range(leaf: AST) -> TextRange:
     return TextRange(start, end)
 
 
-class DiagnosticService:
+class DiagnosticProvider:
     def __init__(self, params: DiagnosticParams):
         self.params = params
 
@@ -191,7 +191,7 @@ class DiagnosticService:
             "message": item.message,
         }
 
-    def get_result(self) -> Dict[str, Any]:
+    def get_diagnostics(self) -> Dict[str, Any]:
         diagnostics = self.execute()
         return {
             "uri": path_to_uri(self.params.file_path),
@@ -213,5 +213,5 @@ def textdocument_publishdiagnostics(session: Session, params: dict):
         document.text,
         document.version,
     )
-    service = DiagnosticService(params)
-    return service.get_result()
+    service = DiagnosticProvider(params)
+    return service.get_diagnostics()

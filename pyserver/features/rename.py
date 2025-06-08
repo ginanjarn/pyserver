@@ -1,4 +1,4 @@
-"""rename service"""
+"""document rename"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,7 +28,7 @@ class RenameParams:
         return (self.line + 1, self.character)
 
 
-class RenameService:
+class RenameProvider:
     def __init__(self, params: RenameParams):
         self.params = params
         self.script = Script(
@@ -80,7 +80,7 @@ class RenameService:
                 "edits": diffutils.get_text_changes(document.text, new_text),
             }
 
-    def get_result(self) -> Dict[str, Any]:
+    def get_changes(self) -> Dict[str, Any]:
         refactored = self.execute()
         return {"documentChanges": list(self.build_item(refactored))}
 
@@ -104,5 +104,5 @@ def textdocument_rename(session: Session, params: dict) -> None:
         character,
         new_name,
     )
-    service = RenameService(params)
-    return service.get_result()
+    service = RenameProvider(params)
+    return service.get_changes()

@@ -1,4 +1,4 @@
-"""completion service"""
+"""document definition"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,7 +25,7 @@ class DefinitionParams:
         return self.line + 1, self.character
 
 
-class DefinitionService:
+class DefinitionProvider:
     def __init__(self, params: DefinitionParams):
         self.params = params
         self.script = Script(
@@ -69,7 +69,7 @@ class DefinitionService:
             }
             yield item
 
-    def get_result(self) -> Dict[str, Any]:
+    def get_definition(self) -> Dict[str, Any]:
         try:
             candidates = self.execute()
         except Exception:
@@ -96,5 +96,5 @@ def textdocument_definition(session: Session, params: dict) -> None:
         line,
         character,
     )
-    service = DefinitionService(params)
-    return service.get_result()
+    service = DefinitionProvider(params)
+    return service.get_definition()

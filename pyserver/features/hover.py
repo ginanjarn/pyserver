@@ -1,4 +1,4 @@
-"""hover service"""
+"""document hover"""
 
 from dataclasses import dataclass
 from html import escape
@@ -29,7 +29,7 @@ class HoverParams:
         return self.line + 1, self.character
 
 
-class HoverService:
+class HoverProvider:
     def __init__(self, params: HoverParams):
         self.params = params
         self.script = Script(
@@ -92,7 +92,7 @@ class HoverService:
 
         return buffer.getvalue()
 
-    def get_result(self) -> Dict[str, Any]:
+    def get_documentation(self) -> Dict[str, Any]:
         try:
             candidates = self.execute()
         except Exception:
@@ -130,5 +130,5 @@ def textdocument_hover(session: Session, params: dict) -> None:
         line,
         character,
     )
-    service = HoverService(params)
-    return service.get_result()
+    service = HoverProvider(params)
+    return service.get_documentation()

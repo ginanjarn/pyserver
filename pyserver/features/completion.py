@@ -1,4 +1,4 @@
-"""completion service"""
+"""document completion"""
 
 from collections import defaultdict
 from dataclasses import dataclass
@@ -34,7 +34,7 @@ ENDMARKER_TYPE = frozenset({"endmarker", "newline"})
 CLOSING_PUNCTUATION = frozenset({":", ")", "]", "}"})
 
 
-class CompletionService:
+class CompletionProvider:
     def __init__(self, params: CompletionParams):
         self.params = params
         self.script = Script(
@@ -193,7 +193,7 @@ class CompletionService:
             },
         }
 
-    def get_result(self) -> Dict[str, Any]:
+    def get_completions(self) -> Dict[str, Any]:
         try:
             candidates = self.execute()
         except Exception:
@@ -228,5 +228,5 @@ def textdocument_completion(session: Session, params: dict) -> None:
         line,
         character,
     )
-    service = CompletionService(params)
-    return service.get_result()
+    service = CompletionProvider(params)
+    return service.get_completions()

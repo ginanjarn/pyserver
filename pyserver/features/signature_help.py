@@ -1,4 +1,4 @@
-"""signature help service"""
+"""document signature help"""
 
 import time
 from dataclasses import dataclass
@@ -27,7 +27,7 @@ class SignatureHelpParams:
         return self.line + 1, self.character
 
 
-class SignatureHelpService:
+class SignatureHelpProvider:
     def __init__(self, params: SignatureHelpParams):
         self.params = params
         self.script = Script(
@@ -67,7 +67,7 @@ class SignatureHelpService:
                 ],
             }
 
-    def get_result(self) -> Dict[str, Any]:
+    def get_signature(self) -> Dict[str, Any]:
         try:
             candidates = self.execute()
         except Exception:
@@ -99,5 +99,5 @@ def textdocument_signaturehelp(session: Session, params: dict) -> None:
         line,
         character,
     )
-    service = SignatureHelpService(params)
-    return service.get_result()
+    service = SignatureHelpProvider(params)
+    return service.get_signature()
