@@ -70,23 +70,26 @@ class CompletionProvider:
         if not leaf:
             return True
 
-        match leaf.type:
-            case tp if tp in IDENTIFIER_TYPE:
-                return True
-            case tp if tp in LITERAL_TYPE:
+        leaf_type = leaf.type
+        if leaf_type in IDENTIFIER_TYPE:
+            return True
+
+        if leaf_type in LITERAL_TYPE:
+            return False
+
+        if leaf_type in ENDMARKER_TYPE:
+            prev = leaf.get_previous_leaf()
+            if not prev:
                 return False
 
-            case tp if tp in ENDMARKER_TYPE:
-                prev = leaf.get_previous_leaf()
-                if not prev:
-                    return False
-                # after keyword eg: 'import <cursor>'
-                if prev.type == "keyword":
-                    return True
-                # after closing operator eg: 'def fn()<cursor>'
-                if prev.value in CLOSING_PUNCTUATION:
-                    return False
+            # after keyword eg: 'import <cursor>'
+            if prev.type == "keyword":
                 return True
+
+            # after closing operator eg: 'def fn()<cursor>'
+            if prev.value in CLOSING_PUNCTUATION:
+                return False
+            return True
 
         if leaf.value in CLOSING_PUNCTUATION:
             return False
@@ -94,6 +97,13 @@ class CompletionProvider:
 
     def _check_is_append_bracket(self, cursor_line: str, leaf: Optional[Leaf]) -> bool:
         if not leaf:
+            return False
+
+        # followed by open bracket
+        if (next_leaf := leaf.get_next_leaf()) and next_leaf.value == "(":
+            return False
+        # import statement
+        if (parent := leaf.parent) and parent.type.startswith("import"):
             return False
 
         if (line := cursor_line.lstrip()) and line.startswith(
@@ -105,12 +115,6 @@ class CompletionProvider:
         ):
             return False
 
-        # followed by open bracket
-        if (next_leaf := leaf.get_next_leaf()) and next_leaf.value == "(":
-            return False
-        # import statement
-        if (parent := leaf.parent) and parent.type.startswith("import"):
-            return False
         return True
 
     def _get_replaced_text_range(
@@ -153,26 +157,31 @@ class CompletionProvider:
 
         # only get signatures for class and function
         if completion_type in CALLABLE_TYPE:
-            if signatures := completion.get_signatures():
+            try:
+                signatures = completion.get_signatures()
                 visible_signature = signatures[0]
-                signature_params = visible_signature.params
+                signature_params = [p.to_string() for p in visible_signature.params]
+            except Exception:
+                pass
 
-                params = ", ".join([p.to_string() for p in signature_params])
-                annotation = ""
-                if annotation_string := getattr(
-                    visible_signature._signature, "annotation_string"
-                ):
+            else:
+                params = ", ".join(signature_params)
+                try:
+                    annotation_string = visible_signature._signature.annotation_string
                     # normalize to one line
                     annotation_string = " ".join(annotation_string.split())
-                    annotation = f" -> {annotation_string}"
+                    annotation = f" -> {annotation_string}" if annotation_string else ""
+                except Exception:
+                    annotation = ""
+
                 signature_text = f"{text}({params}){annotation}"
 
                 # append bracket for function
                 if self.is_append_bracket and completion_type == "function":
                     if signature_params:
                         # overriden method
-                        if signature_params[0].name == "self":
-                            insert_text = signature_text
+                        if signature_params[0] == "self":
+                            insert_text = f"{text}(${{1:{params}}}){annotation}"
                         else:
                             insert_text = f"{text}(${{1}})"
                     else:
