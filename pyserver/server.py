@@ -90,6 +90,10 @@ class RequestManager:
             LOGGER.error("Error handle request: '%s'", err, exc_info=True)
             error = errors.InternalError(err)
 
+        if error:
+            # set result to None if error occured
+            result = None
+
         self.response_callback(request.id, result, errors.transform_error(error))
 
     def _run_task(self):
