@@ -1,7 +1,8 @@
 """document completion"""
 
+import sys
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, astuple
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -32,6 +33,18 @@ CALLABLE_TYPE = frozenset({"class", "function"})
 LITERAL_TYPE = frozenset({"string", "fstring_string", "number"})
 ENDMARKER_TYPE = frozenset({"endmarker", "newline"})
 CLOSING_PUNCTUATION = frozenset({":", ")", "]", "}"})
+# 1st element of sys.path is working directory
+LIBRARY_PATH = tuple(sys.path[1:])
+
+
+@dataclass
+class CompletionItem:
+    text: str
+    signature_text: str
+    insert_text: str
+    kind: str
+
+    __slots__ = ["text", "signature_text", "insert_text", "kind"]
 
 
 class CompletionProvider:
@@ -149,14 +162,16 @@ class CompletionProvider:
         },
     )
 
-    def _build_item(self, completion: Completion) -> dict:
+    cached_items = {}
+
+    def get_completion_item(self, completion: Completion) -> CompletionItem:
         text = completion.name
         signature_text = ""
         insert_text = text
-        completion_type = completion.type
+        kind = completion.type
 
         # only get signatures for class and function
-        if completion_type in CALLABLE_TYPE:
+        if kind in CALLABLE_TYPE:
             try:
                 signatures = completion.get_signatures()
                 visible_signature = signatures[0]
@@ -177,7 +192,7 @@ class CompletionProvider:
                 signature_text = f"{text}({params}){annotation}"
 
                 # append bracket for function
-                if self.is_append_bracket and completion_type == "function":
+                if self.is_append_bracket and kind == "function":
                     if signature_params:
                         # overriden method
                         if signature_params[0] == "self":
@@ -187,10 +202,34 @@ class CompletionProvider:
                     else:
                         insert_text = f"{text}()"
 
+        return CompletionItem(text, signature_text, insert_text, kind)
+
+    def _build_item(self, completion: Completion) -> dict:
+        name = completion.name
+        module_path = str(completion.module_path)
+
+        if module_path.startswith(LIBRARY_PATH):
+            # store library item into cache
+            try:
+                # load
+                completion_item = self.cached_items[module_path][name]
+
+            except (KeyError, AttributeError):
+                completion_item = self.get_completion_item(completion)
+                if not self.cached_items.get(module_path):
+                    self.cached_items[module_path] = {}
+
+                # store
+                if completion_item.kind in {"class", "function"}:
+                    self.cached_items[module_path][name] = completion_item
+        else:
+            completion_item = self.get_completion_item(completion)
+
+        text, signature_text, insert_text, kind = astuple(completion_item)
         return {
             "label": text,
             "labelDetails": {},
-            "kind": self.kind_map[completion_type],
+            "kind": self.kind_map[kind],
             "preselect": False,
             "sortText": text,
             "filterText": text,
