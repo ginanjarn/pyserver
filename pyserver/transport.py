@@ -6,9 +6,17 @@ from abc import ABC, abstractmethod
 from functools import lru_cache
 from io import BytesIO
 
+SEPARATOR = b"\r\n"
+
 
 class HeaderError(ValueError):
     """header error"""
+
+
+def wrap_content(content: bytes) -> bytes:
+    """wrap content"""
+    header = b"Content-Length: %d\r\n" % len(content)
+    return b"%s%s%s" % (header, SEPARATOR, content)
 
 
 @lru_cache(maxsize=512)
@@ -18,37 +26,6 @@ def get_content_length(header: bytes) -> int:
             return int(match.group(1))
 
     raise HeaderError("unable get 'Content-Length'")
-
-
-class Protocol:
-    """Tranfer protocol"""
-
-    separator = b"\r\n"
-
-    @staticmethod
-    def dumps(content: bytes) -> bytes:
-        header = b"Content-Length: %d\r\n" % len(content)
-        return b"%s%s%s" % (header, Protocol.separator, content)
-
-    @staticmethod
-    def loads(stream: BytesIO) -> bytes:
-        # get header
-        headers_buffer = BytesIO()
-        while line := stream.readline():
-            # header and content separated by newline with \r\n
-            if line == Protocol.separator:
-                break
-
-            headers_buffer.write(line)
-
-        # no header received
-        if not headers_buffer.getvalue():
-            raise EOFError("stream closed")
-
-        content_length = get_content_length(headers_buffer.getvalue())
-
-        # the read() function will block until specified content_length satisfied
-        return stream.read(content_length)
 
 
 class Transport(ABC):
@@ -86,9 +63,23 @@ class StandardIO(Transport):
         sys.exit(exit_code)
 
     def write(self, data: bytes):
-        prepared_data = Protocol.dumps(data)
-        sys.stdout.buffer.write(prepared_data)
-        sys.stdout.buffer.flush()
+        buffer = sys.stdout.buffer
+        buffer.write(wrap_content(data))
+        buffer.flush()
 
     def read(self):
-        return Protocol.loads(sys.stdin.buffer)
+        buffer = sys.stdin.buffer
+
+        headers_buffer = BytesIO()
+        while line := buffer.readline():
+            if line == SEPARATOR:
+                break
+            headers_buffer.write(line)
+
+        # no header received
+        if not headers_buffer.getvalue():
+            raise EOFError("stdin closed")
+
+        content_length = get_content_length(headers_buffer.getvalue())
+        # read() is blocking until content_length satisfied
+        return buffer.read(content_length)
