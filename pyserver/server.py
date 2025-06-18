@@ -26,6 +26,10 @@ Error = dict | None
 HandleFunction = Callable[[MethodName, Params], Result]
 
 
+class ServerTerminated(Exception):
+    """ServerTerminated"""
+
+
 class RequestManager:
     """RequestHandler executed outside main loop to make request cancelable"""
 
@@ -185,11 +189,6 @@ class DiagnosticsPublisher:
             )
 
 
-# Exit code
-EXIT_SUCCESS = 0
-EXIT_ERROR = 1
-
-
 class LSPServer:
     """LSP server"""
 
@@ -231,15 +230,12 @@ class LSPServer:
         try:
             self._listen_message()
 
+        except ServerTerminated:
+            pass
         except Exception as err:
             self.send_notification(
                 "window/logMessage", {"type": 1, "message": repr(err)}
             )
-        self.exit(EXIT_ERROR)
-
-    def exit(self, exit_code: int = 0):
-        """exit server"""
-        self.transport.terminate(exit_code)
 
     def _listen_message(self):
         """listen message"""
@@ -263,8 +259,8 @@ class LSPServer:
         params = message.params
 
         if method == "exit":
-            self.exit(EXIT_SUCCESS)
-            return
+            self.transport.terminate()
+            raise ServerTerminated()
 
         if method == "$/cancelRequest":
             self.request_manager.cancel(params["id"])
@@ -288,8 +284,7 @@ class LSPServer:
         method = self.server_request_manager.get(message.id)
         if message.error:
             LOGGER.error("Expected success result for request (%d).", message.id)
-            self.exit(EXIT_ERROR)
-            return
+            raise RuntimeError("expected success result")
 
         self.handle_func(method, message)
 
@@ -307,6 +302,6 @@ class LSPServer:
                 "Response for request (%d) is required.",
                 self.server_request_manager.request_id,
             )
-            self.exit(EXIT_ERROR)
+            raise RuntimeError("missing response")
 
         return exec_map[type(message)](message)
