@@ -112,6 +112,9 @@ class CompletionProvider:
         if not leaf:
             return False
 
+        if leaf.value == "(":
+            return False
+
         # followed by open bracket
         if (next_leaf := leaf.get_next_leaf()) and next_leaf.value == "(":
             return False
