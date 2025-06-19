@@ -38,34 +38,36 @@ class RequestManager:
         handle_function: HandleFunction,
         response_callback: Callable[[Id, Result, Error], None],
     ):
-        self.request_queue = queue.Queue()
-        self.canceled_requests = set()
-
-        self.cancel_lock = threading.RLock()
-        self.in_process_id = -1
-
         self.handle_function = handle_function
-        self.response_callback = response_callback
+        self.send_response = response_callback
+
+        self.request_queue = queue.Queue()
+
+        self.canceled_requests = set()
+        self.in_process_id = -1
+        self.canceled_request_lock = threading.Lock()
+        self.detach_queue_lock = threading.Lock()
 
     def add(self, message: Request):
-        self.request_queue.put(message)
+        with self.detach_queue_lock:
+            self.request_queue.put(message)
 
     def cancel(self, request_id: Id):
-        with self.cancel_lock:
+        with self.canceled_request_lock:
             self.canceled_requests.add(request_id)
 
     def cancel_all(self):
-        with self.cancel_lock:
-            self.cancel(self.in_process_id)
+        self.cancel(self.in_process_id)
 
-            # detach 'request_queue'
+        with self.detach_queue_lock:
             while not self.request_queue.empty():
                 self.request_queue.get_nowait()
 
     def check_canceled(self, request_id: Id):
         # 'canceled_requests' data may be changed during iteration
-        with self.cancel_lock:
+        with self.canceled_request_lock:
             if request_id in self.canceled_requests:
+                self.canceled_requests.remove(request_id)
                 raise errors.RequestCancelled(f'request canceled "{request_id}"')
 
     def handle(self, request: Request):
@@ -78,11 +80,8 @@ class RequestManager:
             result = self.handle_function(request.method, request.params)
             self.check_canceled(request.id)
 
-        except errors.RequestCancelled as err:
-            self.canceled_requests.remove(request.id)
-            error = err
-
         except (
+            errors.RequestCancelled,
             errors.InvalidParams,
             errors.ContentModified,
             errors.InvalidResource,
@@ -98,7 +97,7 @@ class RequestManager:
             # set result to None if error occured
             result = None
 
-        self.response_callback(request.id, result, errors.transform_error(error))
+        self.send_response(request.id, result, errors.transform_error(error))
 
     def _run_task(self):
         while request := self.request_queue.get():
