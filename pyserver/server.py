@@ -3,6 +3,7 @@
 import logging
 import queue
 import threading
+from contextlib import contextmanager
 from typing import Any, Callable
 
 from pyserver import errors
@@ -63,22 +64,30 @@ class RequestManager:
             while not self.request_queue.empty():
                 self.request_queue.get_nowait()
 
-    def check_canceled(self, request_id: Id):
+    def _check_canceled(self, request_id: Id):
         # 'canceled_requests' data may be changed during iteration
         with self.canceled_request_lock:
             if request_id in self.canceled_requests:
-                self.canceled_requests.remove(request_id)
                 raise errors.RequestCancelled(f'request canceled "{request_id}"')
+
+    @contextmanager
+    def check_cancelation(self, request_id: int):
+        try:
+            self._check_canceled(request_id)
+            yield
+            self._check_canceled(request_id)
+
+        except errors.RequestCancelled as err:
+            self.canceled_requests.remove(request_id)
+            raise err
 
     def handle(self, request: Request):
         result, error = None, None
 
         try:
-            # Check request cancelation before and after exec command
-            self.check_canceled(request.id)
-            self.in_process_id = request.id
-            result = self.handle_function(request.method, request.params)
-            self.check_canceled(request.id)
+            with self.check_cancelation(request.id):
+                self.in_process_id = request.id
+                result = self.handle_function(request.method, request.params)
 
         except (
             errors.RequestCancelled,
