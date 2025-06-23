@@ -1,10 +1,10 @@
 """document diagnostics"""
 
-from ast import parse, AST, walk
+from ast import parse, AST, Module, walk
 from dataclasses import dataclass
 from collections import namedtuple
 from pathlib import Path
-from typing import Dict, Any, Iterator, Optional, List
+from typing import Dict, Any, Iterator, Optional
 
 from pyflakes import checker
 
@@ -100,59 +100,65 @@ class LeafGetter:
     """Get leaf from a node without check from beginning"""
 
     def __init__(self, node: AST) -> None:
-        # Only select node which has location
-        self.nodes = [n for n in walk(node) if hasattr(n, "lineno")]
-        self.nodes.sort(key=lambda n: (n.lineno, n.col_offset))
+        if not isinstance(node, Module):
+            raise ValueError("node must %s" % Module)
 
-        self._previous_location = RowCol(0, 0)
-        self._iter_index = 0
+        # nodes location must sorted
+        self.nodes = list(
+            sorted(
+                [n for n in walk(node) if hasattr(n, "lineno")],
+                key=lambda n: (n.lineno, n.col_offset),
+            )
+        )
+
+        self._prev_location = RowCol(0, 0)
+        self._anchor = 0
 
     def get_leaf_at(self, location: RowCol) -> Optional[AST]:
         """get leaf at location"""
-        if location < self._previous_location:
-            raise ValueError(f"location must greater than {self._previous_location}")
+        return self._get_leaf_at(location)
 
-        self._previous_location = location
-        current_index = self._iter_index
+    def _get_leaf_at(self, location: RowCol) -> Optional[AST]:
+        # Search location must incremented to avoid search from parent
+        if location < self._prev_location:
+            raise ValueError(f"location must greater than {self._prev_location}")
+        self._prev_location = location
 
-        # get from child
-        if leaf := self._get_leaf(self.nodes[current_index:], location):
-            return leaf
+        target: AST = None
 
-        # get from nearest parent
-        if leaf := self._get_leaf(
-            reversed(self.nodes[:current_index]), location, increment_index=False
-        ):
-            return leaf
-
-        # revert index if not found
-        self._iter_index = current_index
-        return None
-
-    def _get_leaf(
-        self, nodes: List[AST], location: RowCol, *, increment_index: bool = True
-    ) -> Optional[AST]:
-        for node in nodes:
-            if increment_index:
-                self._iter_index += 1
-
-            start = (node.lineno, node.col_offset)
-            end = (node.end_lineno, node.end_col_offset)
-
+        # Find leaf from children
+        # Search from anchored location not from beginning for eficiency
+        for index in range(self._anchor, len(self.nodes)):
+            leaf = self.nodes[index]
+            start, end = (
+                (leaf.lineno, leaf.col_offset),
+                (leaf.end_lineno, leaf.end_col_offset),
+            )
+            if start > location:
+                break
             if start <= location <= end:
-                # find narrower node
-                current_index = self._iter_index
-                if narrower := self._get_leaf(self.nodes[current_index:], location):
-                    return narrower
+                target = leaf
+                # update anchor to current node
+                self._anchor = index
 
-                # revert index if not found
-                self._iter_index = current_index
-                return node
+        if target:
+            return target
 
-            if start > location and increment_index:
-                return None
+        # Not found in children
+        # Find leaf from parent, find nearest leaf from end
+        for rindex in range(self._anchor, 0, -1):
+            leaf = self.nodes[rindex]
+            start, end = (
+                (leaf.lineno, leaf.col_offset),
+                (leaf.end_lineno, leaf.end_col_offset),
+            )
+            if end < location:
+                break
+            if start <= location <= end:
+                target = leaf
+                # In here we use reverse index, don't update anchor
 
-        return None
+        return target
 
 
 def get_leaf_at(node: AST, location: RowCol) -> Optional[AST]:
