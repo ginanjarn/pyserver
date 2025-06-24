@@ -99,7 +99,7 @@ class RequestManager:
             error = err
 
         except Exception as err:
-            LOGGER.error("Error handle request: '%s'", err, exc_info=True)
+            LOGGER.debug("Error handle request: '%s'", err, exc_info=True)
             error = errors.InternalError(err)
 
         if error:
@@ -189,7 +189,7 @@ class DiagnosticsPublisher:
             pass
 
         except Exception as err:
-            LOGGER.error("Error get diagnostics: '%s'", err, exc_info=True)
+            LOGGER.debug("Error get diagnostics: '%s'", err, exc_info=True)
 
         else:
             self.send_notification(
@@ -291,7 +291,7 @@ class LSPServer:
     def exec_response(self, message: Response):
         method = self.server_request_manager.get(message.id)
         if message.error:
-            LOGGER.error("Expected success result for request (%d).", message.id)
+            LOGGER.debug("Expected success result for request (%d).", message.id)
             raise RuntimeError("expected success result")
 
         self.handle_func(method, message)
@@ -306,7 +306,7 @@ class LSPServer:
             self.server_request_manager.is_waiting_response()
             and type(message) != Response
         ):
-            LOGGER.error(
+            LOGGER.debug(
                 "Response for request (%d) is required.",
                 self.server_request_manager.request_id,
             )
