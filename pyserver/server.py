@@ -67,19 +67,17 @@ class RequestManager:
     def _check_canceled(self, request_id: Id):
         # 'canceled_requests' data may be changed during iteration
         with self.canceled_request_lock:
-            if request_id in self.canceled_requests:
-                raise errors.RequestCancelled(f'request canceled "{request_id}"')
+            if request_id not in self.canceled_requests:
+                return
+
+            self.canceled_requests.remove(request_id)
+            raise errors.RequestCancelled(f'request canceled "{request_id}"')
 
     @contextmanager
     def check_cancelation(self, request_id: int):
-        try:
-            self._check_canceled(request_id)
-            yield
-            self._check_canceled(request_id)
-
-        except errors.RequestCancelled as err:
-            self.canceled_requests.remove(request_id)
-            raise err
+        self._check_canceled(request_id)
+        yield
+        self._check_canceled(request_id)
 
     def handle(self, request: Request):
         result, error = None, None
