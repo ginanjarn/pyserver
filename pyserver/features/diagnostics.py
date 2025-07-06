@@ -107,12 +107,16 @@ class LeafGetter:
         self.nodes = list(
             sorted(
                 [n for n in walk(node) if hasattr(n, "lineno")],
-                key=lambda n: (n.lineno, n.col_offset),
+                key=self.leaf_range,
             )
         )
 
         self._prev_location = RowCol(0, 0)
         self._anchor = 0
+
+    @staticmethod
+    def leaf_range(leaf: AST) -> tuple[int, ...]:
+        return (leaf.lineno, leaf.col_offset, leaf.end_lineno, leaf.end_col_offset)
 
     def get_leaf_at(self, location: RowCol) -> Optional[AST]:
         """get leaf at location"""
@@ -137,6 +141,7 @@ class LeafGetter:
             if start > location:
                 break
             if start <= location <= end:
+                # update target to last matched leaf
                 target = leaf
                 # update anchor to current node
                 self._anchor = index
@@ -152,13 +157,11 @@ class LeafGetter:
                 (leaf.lineno, leaf.col_offset),
                 (leaf.end_lineno, leaf.end_col_offset),
             )
-            if end < location:
-                break
             if start <= location <= end:
-                target = leaf
-                # In here we use reverse index, don't update anchor
+                # return last matched parent
+                return leaf
 
-        return target
+        return None
 
 
 def get_leaf_at(node: AST, location: RowCol) -> Optional[AST]:
