@@ -2,7 +2,7 @@
 
 import sys
 from collections import defaultdict
-from dataclasses import dataclass, astuple
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -40,11 +40,29 @@ LIBRARY_PATH = tuple(sys.path[1:])
 @dataclass
 class CompletionItem:
     text: str
-    signature_text: str
-    insert_text: str
+    signature_params: str
+    signature_returns: str
     kind: str
 
-    __slots__ = ["text", "signature_text", "insert_text", "kind"]
+    __slots__ = ["text", "signature_params", "signature_returns", "kind"]
+
+    def signature(self) -> str:
+        if self.kind not in CALLABLE_TYPE:
+            return ""
+        returns = f" -> {self.signature_returns}" if self.signature_returns else ""
+        return f"{self.text}({self.signature_params}){returns}"
+
+    def insert_text(self, append_bracket: bool = False) -> str:
+        if self.kind != "function":
+            return self.text
+        if not append_bracket:
+            return self.text
+        if not self.signature_params:
+            return f"{self.text}()"
+        # inherited method
+        if self.signature_params.startswith("self"):
+            return self.signature()
+        return f"{self.text}(${{1}})"
 
 
 class CompletionProvider:
@@ -169,9 +187,9 @@ class CompletionProvider:
 
     def get_completion_item(self, completion: Completion) -> CompletionItem:
         text = completion.name
-        signature_text = ""
-        insert_text = text
         kind = completion.type
+        params = ""
+        annotation = ""
 
         # only get signatures for class and function
         if kind in CALLABLE_TYPE:
@@ -187,25 +205,11 @@ class CompletionProvider:
                 try:
                     annotation_string = visible_signature._signature.annotation_string
                     # normalize to one line
-                    annotation_string = " ".join(annotation_string.split())
-                    annotation = f" -> {annotation_string}" if annotation_string else ""
+                    annotation = " ".join(annotation_string.split())
                 except Exception:
                     annotation = ""
 
-                signature_text = f"{text}({params}){annotation}"
-
-                # append bracket for function
-                if self.is_append_bracket and kind == "function":
-                    if signature_params:
-                        # overriden method
-                        if signature_params[0] == "self":
-                            insert_text = f"{text}(${{1:{params}}}){annotation}"
-                        else:
-                            insert_text = f"{text}(${{1}})"
-                    else:
-                        insert_text = f"{text}()"
-
-        return CompletionItem(text, signature_text, insert_text, kind)
+        return CompletionItem(text, params, annotation, kind)
 
     def _build_item(self, completion: Completion) -> dict:
         name = completion.name
@@ -215,32 +219,31 @@ class CompletionProvider:
             # store library item into cache
             try:
                 # load
-                completion_item = self.cached_items[module_path][name]
+                item = self.cached_items[module_path][name]
 
             except (KeyError, AttributeError):
-                completion_item = self.get_completion_item(completion)
+                item = self.get_completion_item(completion)
                 if not self.cached_items.get(module_path):
                     self.cached_items[module_path] = {}
 
                 # store
-                if completion_item.kind in {"class", "function"}:
-                    self.cached_items[module_path][name] = completion_item
+                if item.kind in CALLABLE_TYPE:
+                    self.cached_items[module_path][name] = item
         else:
-            completion_item = self.get_completion_item(completion)
+            item = self.get_completion_item(completion)
 
-        text, signature_text, insert_text, kind = astuple(completion_item)
         return {
-            "label": text,
+            "label": item.text,
             "labelDetails": {},
-            "kind": self.kind_map[kind],
+            "kind": self.kind_map[item.kind],
             "preselect": False,
-            "sortText": text,
-            "filterText": text,
-            "detail": signature_text,
+            "sortText": item.text,
+            "filterText": item.text,
+            "detail": item.signature(),
             "insertTextFormat": 2,  # insert format = snippet
             "textEdit": {
                 "range": self.text_edit_range,
-                "newText": insert_text,
+                "newText": item.insert_text(self.is_append_bracket),
             },
         }
 
