@@ -78,8 +78,8 @@ class HoverProvider:
         buffer = StringIO()
         buffer.write(f"### {name.type} `{name.name}`\n\n")
 
-        if (module_name := name.module_name) and module_name != "__main__":
-            buffer.write(f"module: `{module_name}`\n\n")
+        if name.type != "module" and name.module_name != "__main__":
+            buffer.write(f"module: `{name.module_name}`\n\n")
 
         if name.type in {"class", "function"}:
             if signatures := name.get_signatures():
