@@ -156,11 +156,17 @@ class DiagnosticsPublisher:
         self.handle_function = handle_function
         self.send_notification = notification_callback
 
-        self._target_queue = queue.Queue()
+        # Only last added target checked.
+        self._target = None
+        self._target_lock = threading.Lock()
+        # _publish_event control next checking.
+        self._publish_event = threading.Event()
 
     def publish(self, params: dict) -> None:
         """"""
-        self._target_queue.put(params)
+        with self._target_lock:
+            self._target = params
+            self._publish_event.set()
 
     def run(self) -> None:
         """"""
@@ -168,8 +174,17 @@ class DiagnosticsPublisher:
         thread.start()
 
     def _run_task(self):
-        while params := self._target_queue.get():
-            self._publish_diagnostics(params)
+        while True:
+            if not self._target:
+                self._publish_event.wait()
+                continue
+
+            with self._target_lock:
+                target = self._target
+                self._target = None
+                self._publish_event.clear()
+
+            self._publish_diagnostics(target)
 
     def _publish_diagnostics(self, params: Params):
         try:
