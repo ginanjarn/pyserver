@@ -37,14 +37,20 @@ CLOSING_PUNCTUATION = frozenset({":", ")", "]", "}"})
 LIBRARY_PATH = tuple(sys.path[1:])
 
 
-@dataclass
 class CompletionItem:
-    text: str
-    signature_params: str
-    signature_returns: str
-    kind: str
-
     __slots__ = ["text", "signature_params", "signature_returns", "kind"]
+
+    def __init__(
+        self,
+        text: str,
+        signature_params: str,
+        signature_returns: str,
+        kind: str,
+    ):
+        self.text = text
+        self.signature_params = signature_params
+        self.signature_returns = signature_returns
+        self.kind = kind
 
     def signature(self) -> str:
         if self.kind not in CALLABLE_TYPE:
@@ -183,7 +189,7 @@ class CompletionProvider:
         },
     )
 
-    cached_items = {}
+    cached_items = dict()
 
     def get_completion_item(self, completion: Completion) -> CompletionItem:
         text = completion.name
@@ -219,16 +225,13 @@ class CompletionProvider:
             # store library item into cache
             try:
                 # load
-                item = self.cached_items[module_path][name]
+                item = self.cached_items[(module_path, name)]
 
             except (KeyError, AttributeError):
                 item = self.get_completion_item(completion)
-                if not self.cached_items.get(module_path):
-                    self.cached_items[module_path] = {}
-
                 # store
                 if item.kind in CALLABLE_TYPE:
-                    self.cached_items[module_path][name] = item
+                    self.cached_items[(module_path, name)] = item
         else:
             item = self.get_completion_item(completion)
 
