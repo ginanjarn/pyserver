@@ -70,7 +70,7 @@ def setup_logger(level: int):
 
     stream_handler = logging.StreamHandler()
 
-    log_directory = Path().home().joinpath(".pyserver")
+    log_directory = Path().home() / ".pyserver"
     # create directory if not exist
     log_directory.mkdir(parents=True, exist_ok=True)
     file_handler = logging.FileHandler(log_directory.joinpath("pyserver.log"))
@@ -100,8 +100,7 @@ def try_import(mod_name: str, /, attr_name: str = "") -> Optional[Any]:
 def load_features(handler: LSPHandler):
     """load features"""
 
-    file_dir = Path(__file__).parent
-    config_path = Path(file_dir, "config.json")
+    config_path = Path(__file__).parent / "config.json"
     config = json.loads(config_path.read_text())
     features = config["features"]
 
