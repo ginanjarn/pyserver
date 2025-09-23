@@ -1,12 +1,10 @@
 """transport handler"""
 
-import re
 import sys
 from abc import ABC, abstractmethod
-from functools import lru_cache
 from io import BytesIO
 
-SEPARATOR = b"\r\n"
+CONTENT_SEPARATOR = b"\r\n"
 
 
 class HeaderError(ValueError):
@@ -16,14 +14,13 @@ class HeaderError(ValueError):
 def wrap_content(content: bytes) -> bytes:
     """wrap content"""
     header = b"Content-Length: %d\r\n" % len(content)
-    return b"%s%s%s" % (header, SEPARATOR, content)
+    return b"%s%s%s" % (header, CONTENT_SEPARATOR, content)
 
 
-@lru_cache(maxsize=512)
 def get_content_length(header: bytes) -> int:
-    for line in header.splitlines():
-        if match := re.match(rb"Content-Length: (\d+)", line):
-            return int(match.group(1))
+    for line in header.splitlines(keepends=False):
+        if line[:16] == b"Content-Length: ":
+            return int(line[16:])
 
     raise HeaderError("unable get 'Content-Length'")
 
@@ -52,7 +49,8 @@ class StandardIO(Transport):
     """StandardIO Transport implementation"""
 
     def __init__(self):
-        pass
+        self.stdin_buffer = sys.stdin.buffer
+        self.stdout_buffer = sys.stdout.buffer
 
     def listen_connection(self):
         # just wait until terminated
@@ -63,16 +61,13 @@ class StandardIO(Transport):
         pass
 
     def write(self, data: bytes):
-        buffer = sys.stdout.buffer
-        buffer.write(wrap_content(data))
-        buffer.flush()
+        self.stdout_buffer.write(wrap_content(data))
+        self.stdout_buffer.flush()
 
     def read(self):
-        buffer = sys.stdin.buffer
-
         headers_buffer = BytesIO()
-        while line := buffer.readline():
-            if line == SEPARATOR:
+        while line := self.stdin_buffer.readline():
+            if line == CONTENT_SEPARATOR:
                 break
             headers_buffer.write(line)
 
@@ -82,4 +77,4 @@ class StandardIO(Transport):
 
         content_length = get_content_length(headers_buffer.getvalue())
         # read() is blocking until content_length satisfied
-        return buffer.read(content_length)
+        return self.stdin_buffer.read(content_length)
