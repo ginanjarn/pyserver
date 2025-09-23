@@ -65,9 +65,6 @@ class CompletionItem:
             return self.text
         if not self.signature_params:
             return f"{self.text}()"
-        # inherited method
-        if self.signature_params.startswith("self"):
-            return self.signature()
         return f"{self.text}(${{1}})"
 
 
