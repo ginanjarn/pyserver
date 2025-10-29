@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import sys
+from dataclasses import dataclass
 from functools import partial
 from importlib import import_module
 from pathlib import Path
@@ -97,17 +98,22 @@ def try_import(mod_name: str, /, attr_name: str = "") -> Optional[Any]:
         return None
 
 
+@dataclass
+class FeatureConfig:
+    method: str
+    module: str
+    handler: str
+
+
 def load_features(handler: LSPHandler):
     """load features"""
 
     config_path = Path(__file__).parent / "config.json"
-    config = json.loads(config_path.read_text())
-    features = config["features"]
+    configs = [FeatureConfig(**c) for c in json.loads(config_path.read_text())]
 
-    for name, feature_func in features.items():
-        module, func = feature_func
-        if func := try_import(module, func):
-            handler.register_handlers({name: func})
+    for c in configs:
+        if func := try_import(c.module, c.handler):
+            handler.register_handlers({c.method: func})
         else:
-            err_message = f"Error load feature {name!r}."
+            err_message = f"Error load feature {c.method!r}."
             printerr(err_message)

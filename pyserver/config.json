@@ -1,36 +1,42 @@
-{
-    "features": {
-        "textDocument/completion": [
-            "pyserver.features.completion",
-            "textdocument_completion"
-        ],
-        "textDocument/hover": [
-            "pyserver.features.hover",
-            "textdocument_hover"
-        ],
-        "textDocument/definition": [
-            "pyserver.features.definition",
-            "textdocument_definition"
-        ],
-        "textDocument/formatting": [
-            "pyserver.features.formatting",
-            "textdocument_formatting"
-        ],
-        "textDocument/publishDiagnostics": [
-            "pyserver.features.diagnostics",
-            "textdocument_publishdiagnostics"
-        ],
-        "textDocument/prepareRename": [
-            "pyserver.features.prepare_rename",
-            "textdocument_preparerename"
-        ],
-        "textDocument/rename": [
-            "pyserver.features.rename",
-            "textdocument_rename"
-        ],
-        "textDocument/signatureHelp": [
-            "pyserver.features.signature_help",
-            "textdocument_signaturehelp"
-        ]
-    }
-}
+[
+  {
+    "method": "textDocument/completion",
+    "module": "pyserver.features.completion",
+    "handler": "textdocument_completion"
+  },
+  {
+    "method": "textDocument/hover",
+    "module": "pyserver.features.hover",
+    "handler": "textdocument_hover"
+  },
+  {
+    "method": "textDocument/definition",
+    "module": "pyserver.features.definition",
+    "handler": "textdocument_definition"
+  },
+  {
+    "method": "textDocument/formatting",
+    "module": "pyserver.features.formatting",
+    "handler": "textdocument_formatting"
+  },
+  {
+    "method": "textDocument/publishDiagnostics",
+    "module": "pyserver.features.diagnostics",
+    "handler": "textdocument_publishdiagnostics"
+  },
+  {
+    "method": "textDocument/prepareRename",
+    "module": "pyserver.features.prepare_rename",
+    "handler": "textdocument_preparerename"
+  },
+  {
+    "method": "textDocument/rename",
+    "module": "pyserver.features.rename",
+    "handler": "textdocument_rename"
+  },
+  {
+    "method": "textDocument/signatureHelp",
+    "module": "pyserver.features.signature_help",
+    "handler": "textdocument_signaturehelp"
+  }
+]
