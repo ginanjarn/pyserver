@@ -58,11 +58,15 @@ class CompletionItem:
         returns = f" -> {self.signature_returns}" if self.signature_returns else ""
         return f"{self.text}({self.signature_params}){returns}"
 
-    def insert_text(self, append_bracket: bool = False) -> str:
+    def insert_text(
+        self, append_bracket: bool = False, full_signature: bool = False
+    ) -> str:
         if self.kind != "function":
             return self.text
         if not append_bracket:
             return self.text
+        if full_signature and self.signature_params[:4] == "self":
+            return f"{self.text}({self.signature_params}) -> {self.signature_returns}:"
         if not self.signature_params:
             return f"{self.text}()"
         return f"{self.text}(${{1}})"
@@ -78,6 +82,7 @@ class CompletionProvider:
         )
         self.text_edit_range = {}
         self.is_append_bracket = False
+        self.is_override = False
 
     def execute(self) -> List[Completion]:
         jedi_rowcol = self.params.jedi_rowcol()
@@ -89,6 +94,7 @@ class CompletionProvider:
             self.script._code_lines[self.params.line],  # Text line at cursor location
             cursor_leaf,
         )
+        self.is_override = self._check_is_override(cursor_leaf)
 
         if not self._is_return_completion(cursor_leaf):
             return []
@@ -153,6 +159,13 @@ class CompletionProvider:
             return False
 
         return True
+
+    def _check_is_override(self, leaf: Optional[Leaf]) -> bool:
+        if not leaf:
+            return False
+        if (prev := leaf.get_previous_leaf()) and prev.value == "def":
+            return True
+        return False
 
     def _get_replaced_text_range(
         self, cursor_location: tuple, leaf: Optional[Leaf]
@@ -232,6 +245,7 @@ class CompletionProvider:
         else:
             item = self.get_completion_item(completion)
 
+        insert_text = item.insert_text(self.is_append_bracket, self.is_override)
         return {
             "label": item.text,
             "labelDetails": {},
@@ -243,7 +257,7 @@ class CompletionProvider:
             "insertTextFormat": 2,  # insert format = snippet
             "textEdit": {
                 "range": self.text_edit_range,
-                "newText": item.insert_text(self.is_append_bracket),
+                "newText": insert_text,
             },
         }
 
