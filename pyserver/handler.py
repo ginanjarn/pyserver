@@ -109,7 +109,7 @@ class InitializeManager:
                 "implementationProvider": False,
                 "referencesProvider": False,
                 "documentHighlightProvider": False,
-                "documentSymbolProvider": False,
+                "documentSymbolProvider": True,
                 "codeActionProvider": False,
                 "codeLensProvider": {
                     "resolveProvider": False,

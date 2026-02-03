@@ -38,5 +38,10 @@
     "method": "textDocument/signatureHelp",
     "module": "pyserver.features.signature_help",
     "handler": "textdocument_signaturehelp"
+  },
+  {
+    "method": "textDocument/documentSymbol",
+    "module": "pyserver.features.document_symbol",
+    "handler": "textdocument_symbol"
   }
 ]
