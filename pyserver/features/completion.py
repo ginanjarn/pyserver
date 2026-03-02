@@ -66,7 +66,7 @@ class CompletionItem:
         if not append_bracket:
             return self.text
         if full_signature and self.signature_params[:4] == "self":
-            return f"{self.text}({self.signature_params}) -> {self.signature_returns}:"
+            return f"{self.signature()}:"
         if not self.signature_params:
             return f"{self.text}()"
         return f"{self.text}(${{1}})"
