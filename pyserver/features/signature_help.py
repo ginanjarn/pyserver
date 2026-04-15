@@ -1,9 +1,10 @@
 """document signature help"""
 
 from dataclasses import dataclass
+from html import escape
 from pathlib import Path
 from textwrap import indent
-from typing import List, Dict, Any, Iterator
+from typing import List, Dict, Any
 
 from jedi import Script, Project
 from jedi.api.classes import Signature
@@ -54,17 +55,19 @@ class SignatureHelpProvider:
 
         return f"{name}(\n{indent(params, prefix='  ')}\n){annotation}"
 
-    def build_item(self, signatures: List[Signature]) -> Iterator[dict]:
-        for signature in signatures:
-            label = self.signature_to_string(signature)
-            yield {
+    def build_item(self, signatures: List[Signature]) -> List[dict]:
+        # We has difficulties to get which active signature on aoverloaded function.
+        label = "\n".join([self.signature_to_string(s) for s in signatures])
+        documentation = ""
+        if docstring := signatures[0].docstring(raw=True):
+            documentation = f"<pre>{escape(docstring, quote=False)}</pre>\n\n"
+
+        return [
+            {
                 "label": label,
-                "documentation": signature.docstring(raw=True),
-                "parameters": [
-                    {"label": param.name, "documentation": param.description}
-                    for param in signature.params
-                ],
+                "documentation": documentation,
             }
+        ]
 
     def get_signature(self) -> Dict[str, Any]:
         try:
@@ -73,9 +76,8 @@ class SignatureHelpProvider:
             candidates = []
 
         return {
-            "signatures": list(self.build_item(candidates)),
+            "signatures": self.build_item(candidates),
             "activeSignature": 0,
-            "activeParameters": 0,
         }
 
 
