@@ -75,6 +75,9 @@ class DefinitionProvider:
         except Exception:
             candidates = []
 
+        if not candidates:
+            return None
+
         # transform as rpc
         result = list(self.build_items(candidates))
         return result

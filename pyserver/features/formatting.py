@@ -32,6 +32,9 @@ class FormattingProvider:
 
     def get_formatted(self) -> List[Dict[str, Any]]:
         formatted_str = self.execute()
+
+        if formatted_str == self.params.text:
+            return None
         return diffutils.get_text_changes(self.params.text, formatted_str)
 
 

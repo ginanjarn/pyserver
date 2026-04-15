@@ -75,6 +75,9 @@ class SignatureHelpProvider:
         except Exception:
             candidates = []
 
+        if not candidates:
+            return None
+
         return {
             "signatures": self.build_item(candidates),
             "activeSignature": 0,

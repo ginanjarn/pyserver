@@ -63,6 +63,9 @@ class DocumentSymbolProvider:
         except Exception:
             candidates = []
 
+        if not candidates:
+            return None
+
         # transform as rpc
         return [self._build_item(symbol) for symbol in candidates]
 

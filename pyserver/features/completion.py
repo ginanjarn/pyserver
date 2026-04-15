@@ -267,6 +267,9 @@ class CompletionProvider:
         except Exception:
             candidates = []
 
+        if not candidates:
+            return None
+
         # transform as rpc
         return {
             "isIncomplete": True,
