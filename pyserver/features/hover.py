@@ -82,8 +82,12 @@ class HoverProvider:
             buffer.write(f"module: `{name.module_name}`\n\n")
 
         if name.type in {"class", "function"}:
-            if signatures := name.get_signatures():
+            try:
+                signatures = name.get_signatures()
                 signatures = [self.signature_to_string(s) for s in signatures]
+            except Exception:
+                signatures = []
+            else:
                 signatures = "\n".join(signatures)
                 buffer.write(f"```python\n{signatures}\n```\n\n")
 
