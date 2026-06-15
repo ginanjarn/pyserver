@@ -87,7 +87,8 @@ class HoverProvider:
                 signatures = [self.signature_to_string(s) for s in signatures]
             except Exception:
                 signatures = []
-            else:
+
+            if signatures:
                 signatures = "\n".join(signatures)
                 buffer.write(f"```python\n{signatures}\n```\n\n")
 
