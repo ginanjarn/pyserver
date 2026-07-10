@@ -42,25 +42,32 @@ class OffsetCalculator:
         return 0, 0
 
 
-def _update_text(old_text: str, changes: List[dict]) -> str:
-    temp = old_text
+def _update_text(source: str, text_changes: List[dict]) -> str:
+    line_end = "\n"
+    lines = source.split(line_end)
 
-    for change in changes:
+    # Apply text_changes from last to begin to ensure text changes don't
+    # break change location
+    text_changes = sorted(
+        text_changes,
+        key=lambda c: c["range"]["start"]["line"],
+        reverse=True,
+    )
+    for change in text_changes:
         try:
             start = LineCharacter(**change["range"]["start"])
             end = LineCharacter(**change["range"]["end"])
             new_text = change["text"]
-
         except KeyError as err:
             raise errors.InvalidParams(f"invalid params {err}") from err
 
-        calculator = OffsetCalculator(temp)
-        start_offset = calculator.get_offset(*start)
-        end_offset = calculator.get_offset(*end)
+        srow, scol = start
+        erow, ecol = end
 
-        temp = f"{temp[:start_offset]}{new_text}{temp[end_offset:]}"
+        insert = "".join([lines[srow][:scol], new_text, lines[erow][ecol:]])
+        lines = lines[:srow] + [insert] + lines[erow + 1 :]
 
-    return temp
+    return line_end.join(lines)
 
 
 def apply_document_changes(document: Document, content_change: List[dict], /) -> None:
