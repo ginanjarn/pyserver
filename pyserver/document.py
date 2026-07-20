@@ -46,13 +46,6 @@ def _update_text(source: str, text_changes: List[dict]) -> str:
     line_end = "\n"
     lines = source.split(line_end)
 
-    # Apply text_changes from last to begin to ensure text changes don't
-    # break change location
-    text_changes = sorted(
-        text_changes,
-        key=lambda c: c["range"]["start"]["line"],
-        reverse=True,
-    )
     for change in text_changes:
         try:
             start = LineCharacter(**change["range"]["start"])
