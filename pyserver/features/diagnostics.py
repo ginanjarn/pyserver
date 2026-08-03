@@ -1,12 +1,13 @@
 """document diagnostics"""
 
-from ast import parse, AST, Module, walk
+from ast import parse, AST, iter_child_nodes
 from dataclasses import dataclass
 from collections import namedtuple
 from pathlib import Path
-from typing import Dict, Any, Iterator, Optional
+from typing import Dict, Any, Iterator, List
 
-from pyflakes import checker
+from pyflakes.checker import Checker
+from pyflakes.messages import Message
 
 from pyserver import errors
 from pyserver.uri import uri_to_path, path_to_uri
@@ -64,119 +65,60 @@ class PyflakesDiagnostic:
         # some versions of python emit an offset of -1 for certain encoding errors
         offset = max(offset, 1)
 
+        end_lineno = getattr(err, "end_lineno", lineno)
+        end_offset = getattr(err, "end_offset", offset)
+
         # python ast use 1-based line index
         lineno -= 1
         offset -= 1
+        end_lineno -= 1
+        end_offset -= 1
 
-        msg = err.args[0]
+        a = RowCol(lineno, offset)
+        b = RowCol(end_lineno, end_offset)
 
-        # entire error line as range
-        lines = self.text.splitlines()
-        start = RowCol(lineno, 0)
-        end = RowCol(lineno, len(lines[lineno]))
-        text_range = TextRange(start, end)
-        yield Diagnostic(KIND_ERROR, filename, text_range, msg, "pyflakes")
+        msg = err.msg or err.args[0]
+        filename = err.filename or filename
+        text_range = TextRange(min(a, b), max(a, b))
+        yield Diagnostic(KIND_ERROR, filename, text_range, msg, "ast")
 
     def _get_warnings(self, node: AST, filename: str) -> Iterator[Diagnostic]:
 
-        w = checker.Checker(node, filename=filename)
+        w = Checker(node, filename=filename)
         w.messages.sort(key=lambda m: (m.lineno, m.col))
 
-        leaf_getter = LeafGetter(node)
+        node_map = find_nodes(node, [(m.lineno, m.col) for m in w.messages])
+        yield from (self._build_warning(m, node_map) for m in w.messages)
 
-        for message in w.messages:
-            # look at the '__str__' of 'pyflakes.Message'
-            filename = message.filename
-            lineno = message.lineno
-            offset = message.col
-            msg = message.message % message.message_args
+    def _build_warning(
+        self, message: Message, node_map: Dict[RowCol, AST]
+    ) -> Diagnostic:
 
-            leaf = leaf_getter.get_leaf_at(RowCol(lineno, offset))
-            text_range = get_leaf_range(leaf)
-            yield Diagnostic(KIND_WARNING, filename, text_range, msg, "pyflakes")
+        filename = message.filename
+        text_msg = message.message % message.message_args
 
+        node = node_map[(message.lineno, message.col)]
+        start = RowCol(node.lineno - 1, node.col_offset)
+        end = RowCol(node.end_lineno - 1, node.end_col_offset)
 
-class LeafGetter:
-    """Get leaf from a node without check from beginning"""
-
-    def __init__(self, node: AST) -> None:
-        if not isinstance(node, Module):
-            raise ValueError("node must %s" % Module)
-
-        # nodes location must sorted
-        self.nodes = list(
-            sorted(
-                [n for n in walk(node) if hasattr(n, "lineno")],
-                key=self.leaf_range,
-            )
-        )
-
-        self._prev_location = RowCol(0, 0)
-        self._anchor = 0
-
-    @staticmethod
-    def leaf_range(leaf: AST) -> tuple[int, ...]:
-        return (leaf.lineno, leaf.col_offset, leaf.end_lineno, leaf.end_col_offset)
-
-    def get_leaf_at(self, location: RowCol) -> Optional[AST]:
-        """get leaf at location"""
-        return self._get_leaf_at(location)
-
-    def _get_leaf_at(self, location: RowCol) -> Optional[AST]:
-        # Search location must incremented to avoid search from parent
-        if location < self._prev_location:
-            raise ValueError(f"location must greater than {self._prev_location}")
-        self._prev_location = location
-
-        target: AST = None
-
-        # Find leaf from children
-        # Search from anchored location not from beginning for eficiency
-        for index in range(self._anchor, len(self.nodes)):
-            leaf = self.nodes[index]
-            start, end = (
-                (leaf.lineno, leaf.col_offset),
-                (leaf.end_lineno, leaf.end_col_offset),
-            )
-            if start > location:
-                break
-            if start <= location <= end:
-                # update target to last matched leaf
-                target = leaf
-                # update anchor to current node
-                self._anchor = index
-
-        if target:
-            return target
-
-        # Not found in children
-        # Find leaf from parent, find nearest leaf from end
-        for rindex in range(self._anchor, 0, -1):
-            leaf = self.nodes[rindex]
-            start, end = (
-                (leaf.lineno, leaf.col_offset),
-                (leaf.end_lineno, leaf.end_col_offset),
-            )
-            if start <= location <= end:
-                # return last matched parent
-                return leaf
-
-        return None
+        text_range = TextRange(start, end)
+        return Diagnostic(KIND_WARNING, filename, text_range, text_msg, "pyflakes")
 
 
-def get_leaf_at(node: AST, location: RowCol) -> Optional[AST]:
-    """get ast leaf at location"""
-    leaf_getter = LeafGetter(node)
-    return leaf_getter.get_leaf_at(location)
+def find_nodes(tree: AST, targets: List[RowCol]) -> Dict[RowCol, AST]:
+    stack = [tree]
+    target_set = set(targets)
+    results = {}
 
+    while stack:
+        node = stack.pop()
+        if hasattr(node, "lineno"):
+            pos = (node.lineno, node.col_offset)
+            if pos in target_set:
+                results[pos] = node
+        stack.extend(iter_child_nodes(node))
 
-def get_leaf_range(leaf: AST) -> TextRange:
-    """get ast leaf range at location"""
-
-    # python ast use 1-based line index
-    start = RowCol(leaf.lineno - 1, leaf.col_offset)
-    end = RowCol(leaf.end_lineno - 1, leaf.end_col_offset)
-    return TextRange(start, end)
+    return results
 
 
 class DiagnosticProvider:
