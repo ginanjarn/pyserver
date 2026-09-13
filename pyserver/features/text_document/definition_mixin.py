@@ -1,19 +1,17 @@
-"""document definition"""
-
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 
 from jedi import Script, Project
 from jedi.api.classes import Name
 
-from pyserver import errors
-from pyserver.uri import uri_to_path, path_to_uri
-from pyserver.session import Session
+from ...base_server import BaseServer
+from ...lsprotocol.server import DefinitionParams, Definition, DefinitionLink
+from ...uri import uri_to_path, path_to_uri
 
 
 @dataclass
-class DefinitionParams:
+class Params:
     workspace_path: Path
     file_path: Path
     text: str
@@ -26,7 +24,7 @@ class DefinitionParams:
 
 
 class DefinitionProvider:
-    def __init__(self, params: DefinitionParams):
+    def __init__(self, params: Params):
         self.params = params
         self.script = Script(
             self.params.text,
@@ -83,21 +81,23 @@ class DefinitionProvider:
         return result
 
 
-def textdocument_definition(session: Session, params: dict) -> None:
-    try:
-        file_path = uri_to_path(params["textDocument"]["uri"])
-        line = params["position"]["line"]
-        character = params["position"]["character"]
-    except KeyError as err:
-        raise errors.InvalidParams(f"invalid params: {err}") from err
+class DocumentDefinitionMixin(BaseServer):
 
-    document = session.get_document(file_path)
-    params = DefinitionParams(
-        document.workspace_path,
-        document.file_path,
-        document.text,
-        line,
-        character,
-    )
-    service = DefinitionProvider(params)
-    return service.get_definition()
+    def handle_definition_request(
+        self, context: dict, params: DefinitionParams
+    ) -> Union[Definition, List[DefinitionLink], None]:
+
+        file_name = uri_to_path(params.textDocument.uri)
+        document = self.session.get_document(file_name)
+        line = params.position.line
+        character = params.position.character
+
+        params = Params(
+            self.session.root_path,
+            document.file_name,
+            document.text,
+            line,
+            character,
+        )
+        service = DefinitionProvider(params)
+        return service.get_definition()

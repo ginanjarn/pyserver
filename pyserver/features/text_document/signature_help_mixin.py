@@ -1,21 +1,19 @@
-"""document signature help"""
-
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
 from textwrap import indent
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 
 from jedi import Script, Project
 from jedi.api.classes import Signature
 
-from pyserver import errors
-from pyserver.uri import uri_to_path
-from pyserver.session import Session
+from ...base_server import BaseServer
+from ...lsprotocol.server import SignatureHelpParams, SignatureHelp
+from ...uri import uri_to_path
 
 
 @dataclass
-class SignatureHelpParams:
+class Params:
     workspace_path: Path
     file_path: Path
     text: str
@@ -28,7 +26,7 @@ class SignatureHelpParams:
 
 
 class SignatureHelpProvider:
-    def __init__(self, params: SignatureHelpParams):
+    def __init__(self, params: Params):
         self.params = params
         self.script = Script(
             self.params.text,
@@ -84,21 +82,22 @@ class SignatureHelpProvider:
         }
 
 
-def textdocument_signaturehelp(session: Session, params: dict) -> None:
-    try:
-        file_path = uri_to_path(params["textDocument"]["uri"])
-        line = params["position"]["line"]
-        character = params["position"]["character"]
-    except KeyError as err:
-        raise errors.InvalidParams(f"invalid params: {err}") from err
+class DocumentSignatureHelpMixin(BaseServer):
+    def handle_signature_help_request(
+        self, context: dict, params: SignatureHelpParams
+    ) -> Union[SignatureHelp, None]:
 
-    document = session.get_document(file_path)
-    params = SignatureHelpParams(
-        document.workspace_path,
-        document.file_path,
-        document.text,
-        line,
-        character,
-    )
-    service = SignatureHelpProvider(params)
-    return service.get_signature()
+        file_name = uri_to_path(params.textDocument.uri)
+        document = self.session.get_document(file_name)
+        line = params.position.line
+        character = params.position.character
+
+        params = Params(
+            self.session,
+            document.file_name,
+            document.text,
+            line,
+            character,
+        )
+        service = SignatureHelpProvider(params)
+        return service.get_signature()

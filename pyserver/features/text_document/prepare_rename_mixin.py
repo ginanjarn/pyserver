@@ -1,18 +1,16 @@
-"""document prepare rename"""
-
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 
 from jedi import Script, Project
 
-from pyserver import errors
-from pyserver.uri import uri_to_path
-from pyserver.session import Session
+from ...base_server import BaseServer
+from ...lsprotocol.server import PrepareRenameParams, PrepareRenameResult
+from ...uri import uri_to_path
 
 
 @dataclass
-class PrepareRenameParams:
+class Params:
     workspace_path: Path
     file_path: Path
     text: str
@@ -34,7 +32,7 @@ class Identifier:
 
 
 class PrepareRenameProvider:
-    def __init__(self, params: PrepareRenameParams):
+    def __init__(self, params: Params):
         self.params = params
         self.script = Script(
             self.params.text,
@@ -85,21 +83,22 @@ class PrepareRenameProvider:
         }
 
 
-def textdocument_preparerename(session: Session, params: dict) -> None:
-    try:
-        file_path = uri_to_path(params["textDocument"]["uri"])
-        line = params["position"]["line"]
-        character = params["position"]["character"]
-    except KeyError as err:
-        raise errors.InvalidParams(f"invalid params: {err}") from err
+class DocumentPepareRenameMixin(BaseServer):
+    def handle_prepare_rename_request(
+        self, context: dict, params: PrepareRenameParams
+    ) -> Union[PrepareRenameResult, None]:
 
-    document = session.get_document(file_path)
-    params = PrepareRenameParams(
-        document.workspace_path,
-        document.file_path,
-        document.text,
-        line,
-        character,
-    )
-    service = PrepareRenameProvider(params)
-    return service.get_rename_target()
+        file_name = uri_to_path(params.textDocument.uri)
+        document = self.session.get_document(file_name)
+        line = params.position.line
+        character = params.position.character
+
+        params = Params(
+            self.session.root_path,
+            document.file_name,
+            document.text,
+            line,
+            character,
+        )
+        service = PrepareRenameProvider(params)
+        return service.get_rename_target()

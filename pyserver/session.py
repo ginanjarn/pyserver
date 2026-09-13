@@ -1,43 +1,54 @@
-"""Session"""
+"""Session data"""
 
-from enum import Enum
+import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict
+from threading import RLock
+from typing import Dict, List
 
-from pyserver.document import Document
-from pyserver.errors import InvalidResource
+LOGGER = logging.getLogger(__name__)
 
 
-class SessionStatus(Enum):
-    ShuttingDown = -1
-    NotInitialized = 0
-    Initializing = 1
-    Initialized = 2
+@dataclass
+class WorkspaceFolder:
+    path: Path
+    name: str
+
+
+@dataclass
+class Document:
+    file_name: Path
+    text: str
+    version: int
+
+
+class DocumentNotFound(KeyError):
+    """Document Not Found"""
 
 
 class Session:
-    """Session"""
-
-    def __init__(self):
-        self.status: SessionStatus = SessionStatus.NotInitialized
-
+    def __init__(self) -> None:
         self.root_path: Path = None
-        self.working_documents: Dict[Path, Document] = {}
+        self.working_documents: Dict[Path, Document] = dict()
+        self.workspace_folders: List[WorkspaceFolder] = list()
+        self.is_initialized: bool = False
 
-    def add_document(self, file_path: Path, language_id: str, version: int, text: str):
-        workspace_path = self.root_path
-        self.working_documents[file_path] = Document(
-            workspace_path, file_path, language_id, version, text
-        )
+        self._lock = RLock()
 
-    def remove_document(self, file_path: Path):
-        try:
-            del self.working_documents[file_path]
-        except KeyError:
-            pass
+    def add_document(self, document: Document) -> None:
+        with self._lock:
+            self.working_documents[document.file_name] = document
 
-    def get_document(self, file_path: Path) -> Document:
-        try:
-            return self.working_documents[file_path]
-        except KeyError as err:
-            raise InvalidResource(f"{file_path!r} not opened") from err
+    def get_document(self, file_name: Path) -> Document:
+        with self._lock:
+            try:
+                return self.working_documents[file_name]
+            except KeyError as err:
+                raise DocumentNotFound(str(err)) from err
+
+    def delete_document(self, file_name: Path) -> None:
+        with self._lock:
+            try:
+                del self.working_documents[file_name]
+            except KeyError as err:
+                LOGGER.warning("Document not found %s", err)

@@ -1,21 +1,20 @@
-"""document rename"""
-
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Union
 
 from jedi import Script, Project
 from jedi.api.refactoring import ChangedFile, Refactoring, RefactoringError
 
-from pyserver import errors
-from pyserver.uri import uri_to_path, path_to_uri
-from pyserver.features import diffutils
-from pyserver.document import Document
-from pyserver.session import Session
+from . import diffutils
+from ... import errors
+from ...base_server import BaseServer
+from ...lsprotocol.server import RenameParams, WorkspaceEdit
+from ...session import Session, Document, DocumentNotFound
+from ...uri import uri_to_path, path_to_uri
 
 
 @dataclass
-class RenameParams:
+class Params:
     session: Session
     workspace_path: Path
     file_path: Path
@@ -29,7 +28,7 @@ class RenameParams:
 
 
 class RenameProvider:
-    def __init__(self, params: RenameParams):
+    def __init__(self, params: Params):
         self.params = params
         self.script = Script(
             self.params.text,
@@ -43,7 +42,6 @@ class RenameProvider:
             return self.script.rename(row, col, new_name=self.params.new_name)
         except RefactoringError as err:
             raise errors.InvalidRequest(repr(err)) from err
-
 
     def build_item(self, path: Path, changed_file: ChangedFile) -> Dict[str, Any]:
         # File Resource Changes
@@ -65,14 +63,14 @@ class RenameProvider:
 
         try:
             document = self.params.session.get_document(path)
-        except errors.InvalidResource:
+        except DocumentNotFound:
             temp_text = path.read_text()
-            document = Document(self.params.workspace_path, path, "", 0, temp_text)
+            document = Document(path, "", temp_text, 0)
 
         return {
             "textDocument": {
                 "version": document.version,
-                "uri": path_to_uri(document.file_path),
+                "uri": path_to_uri(document.file_name),
             },
             "edits": diffutils.get_text_changes(document.text, new_text),
         }
@@ -90,24 +88,26 @@ class RenameProvider:
         return {"documentChanges": changes}
 
 
-def textdocument_rename(session: Session, params: dict) -> None:
-    try:
-        file_path = uri_to_path(params["textDocument"]["uri"])
-        line = params["position"]["line"]
-        character = params["position"]["character"]
-        new_name = params["newName"]
-    except KeyError as err:
-        raise errors.InvalidParams(f"invalid params: {err}") from err
+class DocumentRenameMixin(BaseServer):
 
-    document = session.get_document(file_path)
-    params = RenameParams(
-        session,
-        document.workspace_path,
-        document.file_path,
-        document.text,
-        line,
-        character,
-        new_name,
-    )
-    service = RenameProvider(params)
-    return service.get_changes()
+    def handle_rename_request(
+        self, context: dict, params: RenameParams
+    ) -> Union[WorkspaceEdit, None]:
+
+        file_name = uri_to_path(params.textDocument.uri)
+        document = self.session.get_document(file_name)
+        line = params.position.line
+        character = params.position.character
+        new_name = params.newName
+
+        params = Params(
+            self.session,
+            self.session.root_path,
+            document.file_name,
+            document.text,
+            line,
+            character,
+            new_name,
+        )
+        service = RenameProvider(params)
+        return service.get_changes()

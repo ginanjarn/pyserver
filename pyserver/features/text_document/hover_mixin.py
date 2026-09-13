@@ -1,23 +1,21 @@
-"""document hover"""
-
 from dataclasses import dataclass
 from html import escape
 from io import StringIO
 from pathlib import Path
 from textwrap import indent
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 
 from jedi import Script, Project
 from jedi.api.classes import Name, Signature
 from parso.tree import Leaf
 
-from pyserver import errors
-from pyserver.uri import uri_to_path
-from pyserver.session import Session
+from ...base_server import BaseServer
+from ...lsprotocol.server import HoverParams, Hover
+from ...uri import uri_to_path
 
 
 @dataclass
-class HoverParams:
+class Params:
     workspace_path: Path
     file_path: Path
     text: str
@@ -30,7 +28,7 @@ class HoverParams:
 
 
 class HoverProvider:
-    def __init__(self, params: HoverParams):
+    def __init__(self, params: Params):
         self.params = params
         self.script = Script(
             self.params.text,
@@ -119,21 +117,22 @@ class HoverProvider:
         return result
 
 
-def textdocument_hover(session: Session, params: dict) -> None:
-    try:
-        file_path = uri_to_path(params["textDocument"]["uri"])
-        line = params["position"]["line"]
-        character = params["position"]["character"]
-    except KeyError as err:
-        raise errors.InvalidParams(f"invalid params: {err}") from err
+class DocumentHoverMixin(BaseServer):
+    def handle_hover_request(
+        self, context: dict, params: HoverParams
+    ) -> Union[Hover, None]:
 
-    document = session.get_document(file_path)
-    params = HoverParams(
-        document.workspace_path,
-        document.file_path,
-        document.text,
-        line,
-        character,
-    )
-    service = HoverProvider(params)
-    return service.get_documentation()
+        file_name = uri_to_path(params.textDocument.uri)
+        line = params.position.line
+        character = params.position.character
+        document = self.session.get_document(file_name)
+
+        params = Params(
+            self.session.root_path,
+            document.file_name,
+            document.text,
+            line,
+            character,
+        )
+        service = HoverProvider(params)
+        return service.get_documentation()

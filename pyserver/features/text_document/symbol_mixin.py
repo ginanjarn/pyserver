@@ -1,26 +1,24 @@
-"""document symbol"""
-
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Any, Iterator
+from typing import List, Dict, Any, Iterator, Union
 
 from jedi import Script, Project
 from jedi.api.classes import Name
 
-from pyserver import errors
-from pyserver.uri import uri_to_path
-from pyserver.session import Session
+from ...base_server import BaseServer
+from ...lsprotocol.server import DocumentSymbolParams, SymbolInformation, DocumentSymbol
+from ...uri import uri_to_path
 
 
 @dataclass
-class SymbolParams:
+class Params:
     workspace_path: Path
     file_path: Path
     text: str
 
 
 class DocumentSymbolProvider:
-    def __init__(self, params: SymbolParams):
+    def __init__(self, params: Params):
         self.params = params
         self.script = Script(
             self.params.text,
@@ -91,17 +89,18 @@ class DocumentSymbolProvider:
         return list(self._build_items(candidates))
 
 
-def textdocument_symbol(session: Session, params: dict) -> None:
-    try:
-        file_path = uri_to_path(params["textDocument"]["uri"])
-    except KeyError as err:
-        raise errors.InvalidParams(f"invalid params: {err}") from err
+class DocumentSymbolMixin(BaseServer):
+    def handle_document_symbol_request(
+        self, context: dict, params: DocumentSymbolParams
+    ) -> Union[List[SymbolInformation], List[DocumentSymbol], None]:
 
-    document = session.get_document(file_path)
-    params = SymbolParams(
-        document.workspace_path,
-        document.file_path,
-        document.text,
-    )
-    service = DocumentSymbolProvider(params)
-    return service.get_symbols()
+        file_name = uri_to_path(params.textDocument.uri)
+        document = self.session.get_document(file_name)
+
+        params = Params(
+            self.session.root_path,
+            document.file_name,
+            document.text,
+        )
+        service = DocumentSymbolProvider(params)
+        return service.get_symbols()

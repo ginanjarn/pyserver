@@ -1,23 +1,21 @@
-"""document completion"""
-
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 
 from jedi import Script, Project
 from jedi.api.classes import Completion
 from parso.tree import Leaf
 
-from pyserver import errors
-from pyserver.uri import uri_to_path
-from pyserver.session import Session
+from ...base_server import BaseServer
+from ...lsprotocol.server import CompletionParams, CompletionItem, CompletionList
+from ...uri import uri_to_path
 
 
 @dataclass
-class CompletionParams:
-    workspace_path: Path
+class Params:
+    project_path: Path
     file_path: Path
     text: str
     line: int
@@ -37,7 +35,7 @@ CLOSING_PUNCTUATION = frozenset({":", ")", "]", "}"})
 LIBRARY_PATH = tuple(sys.path[1:])
 
 
-class CompletionItem:
+class ResultItem:
     __slots__ = ["text", "signature_params", "signature_returns", "kind"]
 
     def __init__(
@@ -73,12 +71,12 @@ class CompletionItem:
 
 
 class CompletionProvider:
-    def __init__(self, params: CompletionParams):
+    def __init__(self, params: Params):
         self.params = params
         self.script = Script(
             self.params.text,
             path=self.params.file_path,
-            project=Project(self.params.workspace_path),
+            project=Project(self.params.project_path),
         )
         self.text_edit_range = {}
         self.is_append_bracket = False
@@ -201,7 +199,7 @@ class CompletionProvider:
 
     cached_items = dict()
 
-    def get_completion_item(self, completion: Completion) -> CompletionItem:
+    def get_completion_item(self, completion: Completion) -> ResultItem:
         text = completion.name
         kind = completion.type
         params = ""
@@ -225,7 +223,7 @@ class CompletionProvider:
                 except Exception:
                     annotation = ""
 
-        return CompletionItem(text, params, annotation, kind)
+        return ResultItem(text, params, annotation, kind)
 
     def _build_item(self, completion: Completion) -> dict:
         name = completion.name
@@ -283,21 +281,23 @@ class CompletionProvider:
         }
 
 
-def textdocument_completion(session: Session, params: dict) -> None:
-    try:
-        file_path = uri_to_path(params["textDocument"]["uri"])
-        line = params["position"]["line"]
-        character = params["position"]["character"]
-    except KeyError as err:
-        raise errors.InvalidParams(f"invalid params: {err}") from err
+class DocumentCompletionMixin(BaseServer):
 
-    document = session.get_document(file_path)
-    params = CompletionParams(
-        document.workspace_path,
-        document.file_path,
-        document.text,
-        line,
-        character,
-    )
-    service = CompletionProvider(params)
-    return service.get_completions()
+    def handle_completion_request(
+        self, context: dict, params: CompletionParams
+    ) -> Union[List[CompletionItem], CompletionList, None]:
+
+        file_name = uri_to_path(params.textDocument.uri)
+        line = params.position.line
+        character = params.position.character
+        document = self.session.get_document(file_name)
+
+        params = Params(
+            self.session.root_path,
+            document.file_name,
+            document.text,
+            line,
+            character,
+        )
+        service = CompletionProvider(params)
+        return service.get_completions()

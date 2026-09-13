@@ -1,70 +1,32 @@
-"""message handler"""
+"""JSON-RPC Message"""
 
-__all__ = ["Message", "Notification", "Request", "Response", "loads", "dumps"]
-
-import json
-from dataclasses import dataclass, asdict
-from typing import Union, Optional
-
-MethodName = str
+from json import loads, dumps
+from typing import Union, Any
 
 
-@dataclass
-class Message:
-    """JSON-RPC Message interface"""
+class JSONDict(dict):
+    """Dict like object"""
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        self[name] = value
+
+    def __getattr__(self, name: str) -> Any:
+        return self[name]
+
+    def __delattr__(self, name: str) -> None:
+        del self[name]
 
 
-@dataclass
-class Notification(Message):
-    method: MethodName
-    params: Union[dict, list]
+def loads_rpc2(data: Union[str, bytes]) -> JSONDict:
+    dct = loads(data, object_hook=JSONDict)
+    if (rpc_version := dct.pop("jsonrpc", "1.0")) and rpc_version != "2.0":
+        raise ValueError("expected jsonrpc version 2.0")
+    return dct
 
 
-@dataclass
-class Request(Message):
-    id: int
-    method: MethodName
-    params: Union[dict, list]
-
-
-@dataclass
-class Response(Message):
-    id: int
-    result: Optional[Union[dict, list]] = None
-    error: Optional[dict] = None
-
-
-def loads(json_str: Union[str, bytes]) -> Message:
-    """loads json-rpc message"""
-
-    dct = json.loads(json_str)
-    try:
-        if (jsonrpc_version := dct.pop("jsonrpc")) and jsonrpc_version != "2.0":
-            raise ValueError("invalid jsonrpc version")
-    except KeyError as err:
-        raise ValueError("JSON-RPC 2.0 is required") from err
-
-    if dct.get("method"):
-        id = dct.get("id")
-        if id is not None:
-            return Request(**dct)
-        return Notification(**dct)
-    return Response(**dct)
-
-
-def dumps(message: Message, as_bytes: bool = False) -> Union[str, bytes]:
-    """dumps json-rpc message"""
-
-    dct = asdict(message)
-    dct["jsonrpc"] = "2.0"
-
-    if isinstance(message, Response):
-        if message.error is None:
-            del dct["error"]
-        else:
-            del dct["result"]
-
-    json_str = json.dumps(dct)
+def dumps_rpc2(message: dict, as_bytes: bool = False) -> Union[str, bytes]:
+    temp = JSONDict(message)
+    temp["jsonrpc"] = "2.0"
     if as_bytes:
-        return json_str.encode()
-    return json_str
+        return dumps(temp).encode("utf-8")
+    return dumps(temp)
