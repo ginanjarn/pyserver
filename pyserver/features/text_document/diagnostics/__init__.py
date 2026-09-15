@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from collections import namedtuple
+from typing import Optional, Any
 
 TextRange = namedtuple("TextRange", ["start", "end"])
 
@@ -12,8 +13,9 @@ KIND_WARNING = 2
 class Diagnostic:
     """Diagnostic item"""
 
-    severity: int
-    file_name: str
     text_range: TextRange
+    severity: int
+    code: str
     message: str
     source: str
+    data: Optional[Any] = None

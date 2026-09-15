@@ -1,5 +1,5 @@
 from ast import parse, AST, iter_child_nodes
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from typing import Iterator, List, Dict
 
 from pyflakes.checker import Checker
@@ -8,6 +8,59 @@ from pyflakes.messages import Message
 from . import Diagnostic, TextRange, KIND_ERROR, KIND_WARNING
 
 RowCol = namedtuple("RowCol", ["row", "column"])
+
+FLAKE8_PYFLAKES_CODES = defaultdict(
+    lambda: "F999",
+    {
+        "UnusedImport": "F401",
+        "ImportShadowedByLoopVar": "F402",
+        "ImportStarUsed": "F403",
+        "LateFutureImport": "F404",
+        "ImportStarUsage": "F405",
+        "ImportStarNotPermitted": "F406",
+        "FutureFeatureNotDefined": "F407",
+        "PercentFormatInvalidFormat": "F501",
+        "PercentFormatExpectedMapping": "F502",
+        "PercentFormatExpectedSequence": "F503",
+        "PercentFormatExtraNamedArguments": "F504",
+        "PercentFormatMissingArgument": "F505",
+        "PercentFormatMixedPositionalAndNamed": "F506",
+        "PercentFormatPositionalCountMismatch": "F507",
+        "PercentFormatStarRequiresSequence": "F508",
+        "PercentFormatUnsupportedFormatCharacter": "F509",
+        "StringDotFormatInvalidFormat": "F521",
+        "StringDotFormatExtraNamedArguments": "F522",
+        "StringDotFormatExtraPositionalArguments": "F523",
+        "StringDotFormatMissingArgument": "F524",
+        "StringDotFormatMixingAutomatic": "F525",
+        "FStringMissingPlaceholders": "F541",
+        "TStringMissingPlaceholders": "F542",
+        "MultiValueRepeatedKeyLiteral": "F601",
+        "MultiValueRepeatedKeyVariable": "F602",
+        "TooManyExpressionsInStarredAssignment": "F621",
+        "TwoStarredExpressions": "F622",
+        "AssertTuple": "F631",
+        "IsLiteral": "F632",
+        "InvalidPrintSyntax": "F633",
+        "IfTuple": "F634",
+        "BreakOutsideLoop": "F701",
+        "ContinueOutsideLoop": "F702",
+        "YieldOutsideFunction": "F704",
+        "ReturnOutsideFunction": "F706",
+        "DefaultExceptNotLast": "F707",
+        "DoctestSyntaxError": "F721",
+        "ForwardAnnotationSyntaxError": "F722",
+        "RedefinedWhileUnused": "F811",
+        "UndefinedName": "F821",
+        "UndefinedExport": "F822",
+        "UndefinedLocal": "F823",
+        "UnusedIndirectAssignment": "F824",
+        "DuplicateArgument": "F831",
+        "UnusedVariable": "F841",
+        "UnusedAnnotation": "F842",
+        "RaiseNotImplemented": "F901",
+    },
+)
 
 
 class PyflakesChecker:
@@ -50,9 +103,8 @@ class PyflakesChecker:
         b = RowCol(end_lineno, end_offset)
 
         msg = err.msg or err.args[0]
-        filename = err.filename or filename
         text_range = TextRange(min(a, b), max(a, b))
-        yield Diagnostic(KIND_ERROR, filename, text_range, msg, "ast")
+        yield Diagnostic(text_range, KIND_ERROR, "F999", msg, "ast")
 
     def _get_warnings(self, node: AST, filename: str) -> Iterator[Diagnostic]:
 
@@ -66,15 +118,18 @@ class PyflakesChecker:
         self, message: Message, node_map: Dict[RowCol, AST]
     ) -> Diagnostic:
 
-        filename = message.filename
-        text_msg = message.message % message.message_args
-
         node = node_map[(message.lineno, message.col)]
-        start = RowCol(node.lineno - 1, node.col_offset)
-        end = RowCol(node.end_lineno - 1, node.end_col_offset)
+        a = RowCol(node.lineno - 1, node.col_offset)
+        b = RowCol(node.end_lineno - 1, node.end_col_offset)
+        start = min(a, b)
+        end = max(a, b)
 
         text_range = TextRange(start, end)
-        return Diagnostic(KIND_WARNING, filename, text_range, text_msg, "pyflakes")
+        text_msg = message.message % message.message_args
+        code = FLAKE8_PYFLAKES_CODES[type(message).__name__]
+        return Diagnostic(
+            text_range, KIND_WARNING, code, text_msg, "pyflakes", message.message_args
+        )
 
 
 def find_nodes(tree: AST, targets: List[RowCol]) -> Dict[RowCol, AST]:

@@ -38,8 +38,10 @@ class DiagnosticProvider:
                 "end": {"line": end.row, "character": end.column},
             },
             "severity": item.severity,
+            "code": item.code,
             "source": item.source,
             "message": item.message,
+            "data": item.data,
         }
 
     def get_diagnostics(self) -> Dict[str, Any]:
