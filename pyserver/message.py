@@ -1,6 +1,9 @@
 """JSON-RPC Message"""
 
+from dataclasses import asdict, is_dataclass
+from enum import Enum
 from json import loads, dumps
+from pathlib import Path
 from typing import Union, Any
 
 
@@ -24,9 +27,19 @@ def loads_rpc2(data: Union[str, bytes]) -> JSONDict:
     return dct
 
 
+def dumps_default(data: Any) -> Any:
+    if isinstance(data, Enum):
+        return data.value
+    if is_dataclass(data):
+        return asdict(data)
+    if isinstance(data, Path):
+        return str(data)
+    return data
+
+
 def dumps_rpc2(message: dict, as_bytes: bool = False) -> Union[str, bytes]:
     temp = JSONDict(message)
     temp["jsonrpc"] = "2.0"
     if as_bytes:
-        return dumps(temp).encode("utf-8")
+        return dumps(temp, default=dumps_default).encode("utf-8")
     return dumps(temp)
