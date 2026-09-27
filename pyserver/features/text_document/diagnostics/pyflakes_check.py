@@ -61,6 +61,58 @@ FLAKE8_PYFLAKES_CODES = defaultdict(
         "RaiseNotImplemented": "F901",
     },
 )
+FLAKE8_PYFLAKES_FIELDS = defaultdict(
+    lambda: (),
+    {
+        "UnusedImport": ("name",),
+        "ImportShadowedByLoopVar": ("name", "orig_lineno"),
+        "ImportStarUsed": ("modname",),
+        "LateFutureImport": (),
+        "ImportStarUsage": ("name", "from_list"),
+        "ImportStarNotPermitted": ("modname",),
+        "FutureFeatureNotDefined": ("name",),
+        "PercentFormatInvalidFormat": ("error",),
+        "PercentFormatExpectedMapping": (),
+        "PercentFormatExpectedSequence": (),
+        "PercentFormatExtraNamedArguments": (),
+        "PercentFormatMissingArgument": ("missing_arguments",),
+        "PercentFormatMixedPositionalAndNamed": (),
+        "PercentFormatPositionalCountMismatch": (),
+        "PercentFormatStarRequiresSequence": (),
+        "PercentFormatUnsupportedFormatCharacter": (),
+        "StringDotFormatInvalidFormat": (),
+        "StringDotFormatExtraNamedArguments": (),
+        "StringDotFormatExtraPositionalArguments": (),
+        "StringDotFormatMissingArgument": ("missing_arguments",),
+        "StringDotFormatMixingAutomatic": (),
+        "FStringMissingPlaceholders": (),
+        "TStringMissingPlaceholders": (),
+        "MultiValueRepeatedKeyLiteral": ("key",),
+        "MultiValueRepeatedKeyVariable": ("key",),
+        "TooManyExpressionsInStarredAssignment": (),
+        "TwoStarredExpressions": (),
+        "AssertTuple": (),
+        "IsLiteral": (),
+        "InvalidPrintSyntax": (),
+        "IfTuple": (),
+        "BreakOutsideLoop": (),
+        "ContinueOutsideLoop": (),
+        "YieldOutsideFunction": (),
+        "ReturnOutsideFunction": (),
+        "DefaultExceptNotLast": (),
+        "DoctestSyntaxError": (),
+        "ForwardAnnotationSyntaxError": ("annotation",),
+        "RedefinedWhileUnused": ("name", "orig_lineno"),
+        "UndefinedName": ("name",),
+        "UndefinedExport": ("name",),
+        "UndefinedLocal": ("name", "orig_lineno"),
+        "UnusedIndirectAssignment": ("type", "name"),
+        "DuplicateArgument": ("name",),
+        "UnusedVariable": ("names",),
+        "UnusedAnnotation": ("names",),
+        "RaiseNotImplemented": (),
+    },
+)
 
 
 class PyflakesChecker:
@@ -126,10 +178,12 @@ class PyflakesChecker:
 
         text_range = TextRange(start, end)
         text_msg = message.message % message.message_args
-        code = FLAKE8_PYFLAKES_CODES[type(message).__name__]
-        return Diagnostic(
-            text_range, KIND_WARNING, code, text_msg, "pyflakes", message.message_args
-        )
+
+        pyflakes_msg_name = type(message).__name__
+        code = FLAKE8_PYFLAKES_CODES[pyflakes_msg_name]
+        data = dict(zip(FLAKE8_PYFLAKES_FIELDS[pyflakes_msg_name], message.message_args))
+
+        return Diagnostic(text_range, KIND_WARNING, code, text_msg, "pyflakes", data)
 
 
 def find_nodes(tree: AST, targets: List[RowCol]) -> Dict[RowCol, AST]:
